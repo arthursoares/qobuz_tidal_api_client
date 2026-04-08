@@ -258,7 +258,7 @@ type Playlist struct {
 	Duration        int         `json:"duration"`
 	IsPublic        bool        `json:"is_public"`
 	IsCollaborative bool        `json:"is_collaborative"`
-	PublicAt        interface{} `json:"public_at"` // int (unix timestamp) or bool (false)
+	PublicAt        any `json:"public_at"` // int (unix timestamp) or bool (false)
 	CreatedAt       int         `json:"created_at"`
 	UpdatedAt       int         `json:"updated_at"`
 	Owner           UserSummary `json:"owner"`
