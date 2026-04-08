@@ -189,3 +189,16 @@ func (s *CatalogService) SearchTracks(ctx context.Context, query string, limit, 
 	}
 	return ParsePaginated(data, "tracks")
 }
+
+// GetAlbumStory returns editorial content for an album.
+func (s *CatalogService) GetAlbumStory(ctx context.Context, albumID string) (json.RawMessage, error) {
+	data, err := s.t.get(ctx, "album/story", map[string]string{
+		"album_id": albumID,
+		"offset":   "0",
+		"limit":    "10",
+	})
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(data), nil
+}

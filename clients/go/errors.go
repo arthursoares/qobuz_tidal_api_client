@@ -9,6 +9,7 @@ import (
 type Error struct {
 	Status  int
 	Message string
+	Code    int
 }
 
 func (e *Error) Error() string {
