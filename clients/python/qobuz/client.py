@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from ._http import HttpTransport
 from .catalog import CatalogAPI
 from .discovery import DiscoveryAPI
@@ -38,6 +41,31 @@ class QobuzClient:
         self.catalog = CatalogAPI(self._transport)
         self.discovery = DiscoveryAPI(self._transport)
         self.streaming = StreamingAPI(self._transport, app_secret=app_secret)
+
+    @classmethod
+    def from_credentials(
+        cls, credentials_path: str | None = None, **kwargs
+    ) -> QobuzClient:
+        """Create a client from saved credentials file.
+
+        Args:
+            credentials_path: Path to a credentials JSON file. Defaults to
+                ``~/.config/qobuz/credentials.json``.
+            **kwargs: Additional keyword arguments forwarded to :class:`QobuzClient`.
+        """
+        from .auth import load_credentials, CREDENTIALS_FILE
+
+        path = Path(credentials_path) if credentials_path else CREDENTIALS_FILE
+        creds = json.loads(path.read_text()) if path.exists() else load_credentials()
+        if not creds:
+            raise FileNotFoundError(
+                f"No credentials found at {path}. Run: qobuz login"
+            )
+        return cls(
+            app_id=creds["app_id"],
+            user_auth_token=creds["user_auth_token"],
+            **kwargs,
+        )
 
     async def last_update(self) -> LastUpdate:
         """Poll for library changes — returns timestamps for each section."""
