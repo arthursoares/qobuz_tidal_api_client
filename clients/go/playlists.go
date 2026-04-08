@@ -105,13 +105,29 @@ func (s *PlaylistsService) AddTracks(ctx context.Context, playlistID int, trackI
 	return nil
 }
 
-// Get fetches a single playlist by ID.
-func (s *PlaylistsService) Get(ctx context.Context, playlistID int) (*Playlist, error) {
+// Get fetches a single playlist by ID. Options can be nil for defaults
+// (extra="tracks", offset=0, limit=50).
+func (s *PlaylistsService) Get(ctx context.Context, playlistID int, opts *PlaylistGetOptions) (*Playlist, error) {
+	extra := "tracks"
+	offset := 0
+	limit := 50
+	if opts != nil {
+		if opts.Extra != "" {
+			extra = opts.Extra
+		}
+		if opts.Offset > 0 {
+			offset = opts.Offset
+		}
+		if opts.Limit > 0 {
+			limit = opts.Limit
+		}
+	}
+
 	data, err := s.t.get(ctx, "playlist/get", map[string]string{
 		"playlist_id": fmt.Sprintf("%d", playlistID),
-		"extra":       "tracks",
-		"offset":      "0",
-		"limit":       "50",
+		"extra":       extra,
+		"offset":      fmt.Sprintf("%d", offset),
+		"limit":       fmt.Sprintf("%d", limit),
 	})
 	if err != nil {
 		return nil, err

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"golang.org/x/time/rate"
 )
@@ -33,8 +34,8 @@ func newTransport(appID, userAuthToken string) *transport {
 		baseURL:       defaultBaseURL,
 		appID:         appID,
 		userAuthToken: userAuthToken,
-		httpClient:    http.DefaultClient,
-		limiter:       rate.NewLimiter(rate.Limit(0.5), 1), // 30 req/min = 0.5 req/sec
+		httpClient:    &http.Client{Timeout: 30 * time.Second},
+		limiter:       rate.NewLimiter(rate.Every(2*time.Second), 5), // 30 req/min, burst of 5
 	}
 }
 
@@ -143,6 +144,7 @@ func (t *transport) doRequest(req *http.Request) ([]byte, error) {
 func raiseForStatus(status int, body []byte) error {
 	var errBody struct {
 		Message string `json:"message"`
+		Code    int    `json:"code"`
 	}
 	if err := json.Unmarshal(body, &errBody); err != nil {
 		errBody.Message = fmt.Sprintf("HTTP %d", status)
@@ -150,5 +152,5 @@ func raiseForStatus(status int, body []byte) error {
 	if errBody.Message == "" {
 		errBody.Message = fmt.Sprintf("HTTP %d", status)
 	}
-	return &Error{Status: status, Message: errBody.Message}
+	return &Error{Status: status, Message: errBody.Message, Code: errBody.Code}
 }

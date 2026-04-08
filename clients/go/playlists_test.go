@@ -191,6 +191,122 @@ func TestPlaylistsList(t *testing.T) {
 	}
 }
 
+func TestPlaylistsGetWithTracks(t *testing.T) {
+	server, client := testServerAndClient(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/playlist/get" {
+			t.Errorf("path = %q, want /playlist/get", r.URL.Path)
+		}
+		if r.URL.Query().Get("extra") != "tracks" {
+			t.Errorf("extra = %q, want tracks", r.URL.Query().Get("extra"))
+		}
+
+		resp := map[string]interface{}{
+			"id":               42,
+			"name":             "My Playlist",
+			"description":      "desc",
+			"tracks_count":     2,
+			"users_count":      1,
+			"duration":         500,
+			"is_public":        true,
+			"is_collaborative": false,
+			"public_at":        false,
+			"created_at":       1000,
+			"updated_at":       2000,
+			"owner":            map[string]interface{}{"id": 1, "name": "user"},
+			"tracks": map[string]interface{}{
+				"items": []interface{}{
+					map[string]interface{}{
+						"id":         100,
+						"title":      "Track A",
+						"duration":   200,
+						"performer":  map[string]interface{}{"id": 1, "name": "Artist A"},
+						"album":      map[string]interface{}{"id": "x", "title": "Album X"},
+						"audio_info": map[string]interface{}{},
+						"rights":     map[string]interface{}{},
+					},
+					map[string]interface{}{
+						"id":         200,
+						"title":      "Track B",
+						"duration":   300,
+						"performer":  map[string]interface{}{"id": 2, "name": "Artist B"},
+						"album":      map[string]interface{}{"id": "y", "title": "Album Y"},
+						"audio_info": map[string]interface{}{},
+						"rights":     map[string]interface{}{},
+					},
+				},
+				"total":  2,
+				"limit":  50,
+				"offset": 0,
+			},
+		}
+		w.WriteHeader(200)
+		json.NewEncoder(w).Encode(resp)
+	})
+	defer server.Close()
+
+	p, err := client.Playlists.Get(context.Background(), 42, nil)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+
+	if p.Name != "My Playlist" {
+		t.Errorf("Name = %q, want %q", p.Name, "My Playlist")
+	}
+	if p.Tracks == nil {
+		t.Fatal("Tracks should not be nil")
+	}
+	if len(p.Tracks.Items) != 2 {
+		t.Fatalf("Tracks.Items length = %d, want 2", len(p.Tracks.Items))
+	}
+	if p.Tracks.Items[0].Title != "Track A" {
+		t.Errorf("Tracks.Items[0].Title = %q, want %q", p.Tracks.Items[0].Title, "Track A")
+	}
+	if p.Tracks.Total != 2 {
+		t.Errorf("Tracks.Total = %d, want 2", p.Tracks.Total)
+	}
+}
+
+func TestPlaylistsGetWithOptions(t *testing.T) {
+	server, client := testServerAndClient(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("extra") != "track_ids,getSimilarPlaylists" {
+			t.Errorf("extra = %q, want track_ids,getSimilarPlaylists", r.URL.Query().Get("extra"))
+		}
+		if r.URL.Query().Get("offset") != "10" {
+			t.Errorf("offset = %q, want 10", r.URL.Query().Get("offset"))
+		}
+		if r.URL.Query().Get("limit") != "25" {
+			t.Errorf("limit = %q, want 25", r.URL.Query().Get("limit"))
+		}
+
+		resp := map[string]interface{}{
+			"id":               42,
+			"name":             "Test",
+			"description":      "",
+			"tracks_count":     0,
+			"users_count":      0,
+			"duration":         0,
+			"is_public":        false,
+			"is_collaborative": false,
+			"public_at":        false,
+			"created_at":       1000,
+			"updated_at":       2000,
+			"owner":            map[string]interface{}{"id": 1, "name": "user"},
+		}
+		w.WriteHeader(200)
+		json.NewEncoder(w).Encode(resp)
+	})
+	defer server.Close()
+
+	_, err := client.Playlists.Get(context.Background(), 42, &PlaylistGetOptions{
+		Extra:  "track_ids,getSimilarPlaylists",
+		Offset: 10,
+		Limit:  25,
+	})
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+}
+
 func TestPlaylistsSearch(t *testing.T) {
 	server, client := testServerAndClient(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/playlist/search" {

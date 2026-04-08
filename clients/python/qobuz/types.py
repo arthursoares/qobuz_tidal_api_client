@@ -241,6 +241,7 @@ class Playlist:
     created_at: int
     updated_at: int
     owner: UserSummary
+    tracks: list[dict] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, d: dict) -> Playlist:
@@ -257,6 +258,7 @@ class Playlist:
             created_at=d.get("created_at", 0),
             updated_at=d.get("updated_at", 0),
             owner=UserSummary.from_dict(d.get("owner", {"id": 0, "name": ""})),
+            tracks=d.get("tracks", {}).get("items", []),
         )
 
 
