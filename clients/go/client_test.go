@@ -66,8 +66,8 @@ func TestClientLastUpdate(t *testing.T) {
 		if r.URL.Path != "/user/lastUpdate" {
 			t.Errorf("path = %q, want /user/lastUpdate", r.URL.Path)
 		}
-		resp := map[string]interface{}{
-			"last_update": map[string]interface{}{
+		resp := map[string]any{
+			"last_update": map[string]any{
 				"favorite":        1000,
 				"favorite_album":  2000,
 				"favorite_artist": 3000,
@@ -112,8 +112,8 @@ func TestClientLogin(t *testing.T) {
 			t.Errorf("extra = %q, want partner", r.PostForm.Get("extra"))
 		}
 
-		resp := map[string]interface{}{
-			"user": map[string]interface{}{
+		resp := map[string]any{
+			"user": map[string]any{
 				"id":   2113276,
 				"name": "testuser",
 			},
@@ -132,7 +132,7 @@ func TestClientLogin(t *testing.T) {
 		t.Fatal("data should not be nil")
 	}
 
-	var body map[string]interface{}
+	var body map[string]any
 	if err := json.Unmarshal(data, &body); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -148,8 +148,8 @@ func TestClientHeaders(t *testing.T) {
 	server, client := testServerAndClient(func(w http.ResponseWriter, r *http.Request) {
 		capturedAppID = r.Header.Get("X-App-Id")
 		capturedToken = r.Header.Get("X-User-Auth-Token")
-		resp := map[string]interface{}{
-			"last_update": map[string]interface{}{},
+		resp := map[string]any{
+			"last_update": map[string]any{},
 		}
 		w.WriteHeader(200)
 		json.NewEncoder(w).Encode(resp)
@@ -178,7 +178,7 @@ func TestClientIntegrationWorkflow(t *testing.T) {
 		case "/user/login":
 			w.Write([]byte(`{"user": {"id": 1}}`))
 		case "/favorite/getUserFavoriteIds":
-			resp := map[string]interface{}{
+			resp := map[string]any{
 				"albums":  []string{"a1"},
 				"tracks":  []int{100},
 				"artists": []int{},
@@ -187,9 +187,9 @@ func TestClientIntegrationWorkflow(t *testing.T) {
 			}
 			json.NewEncoder(w).Encode(resp)
 		case "/album/search":
-			resp := map[string]interface{}{
-				"albums": map[string]interface{}{
-					"items":  []interface{}{map[string]interface{}{"id": "found-1", "title": "Found Album"}},
+			resp := map[string]any{
+				"albums": map[string]any{
+					"items":  []any{map[string]any{"id": "found-1", "title": "Found Album"}},
 					"total":  1,
 					"limit":  50,
 					"offset": 0,
@@ -197,7 +197,7 @@ func TestClientIntegrationWorkflow(t *testing.T) {
 			}
 			json.NewEncoder(w).Encode(resp)
 		case "/file/url":
-			resp := map[string]interface{}{
+			resp := map[string]any{
 				"track_id":     100,
 				"format_id":    7,
 				"url_template": "https://streaming.example.com/$SEGMENT$",
