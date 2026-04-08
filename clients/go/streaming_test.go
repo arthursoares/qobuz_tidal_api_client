@@ -92,7 +92,7 @@ func TestStreamingGetFileURL(t *testing.T) {
 			t.Error("request_sig should not be empty")
 		}
 
-		resp := map[string]interface{}{
+		resp := map[string]any{
 			"track_id":     33967376,
 			"format_id":    7,
 			"mime_type":    "audio/mp4",
@@ -104,7 +104,7 @@ func TestStreamingGetFileURL(t *testing.T) {
 			"key_id":       "key-123",
 			"key":          "qbz-1.xxx",
 			"blob":         "opaque",
-			"restrictions": []interface{}{},
+			"restrictions": []any{},
 		}
 		w.WriteHeader(200)
 		json.NewEncoder(w).Encode(resp)
@@ -163,7 +163,7 @@ func TestStreamingStartSession(t *testing.T) {
 		capturedTS = r.PostForm.Get("request_ts")
 		capturedSig = r.PostForm.Get("request_sig")
 
-		resp := map[string]interface{}{
+		resp := map[string]any{
 			"session_id": "sess-abc-123",
 			"profile":    "qbz-1",
 			"expires_at": 1775700000,
@@ -218,7 +218,7 @@ func TestStreamingReportStart(t *testing.T) {
 	}
 
 	// Verify events JSON contains required fields
-	var events []map[string]interface{}
+	var events []map[string]any
 	if err := json.Unmarshal([]byte(capturedEvents), &events); err != nil {
 		t.Fatalf("unmarshal events: %v", err)
 	}
@@ -240,7 +240,7 @@ func TestStreamingReportStart(t *testing.T) {
 }
 
 func TestStreamingReportEnd(t *testing.T) {
-	var capturedBody map[string]interface{}
+	var capturedBody map[string]any
 
 	server, client := testServerAndClient(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/track/reportStreamingEndJson" {
@@ -253,7 +253,7 @@ func TestStreamingReportEnd(t *testing.T) {
 	})
 	defer server.Close()
 
-	events := []map[string]interface{}{
+	events := []map[string]any{
 		{"track_id": 123, "duration": 100},
 	}
 	err := client.Streaming.ReportEnd(context.Background(), events)
@@ -270,7 +270,7 @@ func TestStreamingReportEnd(t *testing.T) {
 }
 
 func TestStreamingReportContext(t *testing.T) {
-	var capturedBody map[string]interface{}
+	var capturedBody map[string]any
 
 	server, client := testServerAndClient(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/event/reportTrackContext" {
@@ -283,7 +283,7 @@ func TestStreamingReportContext(t *testing.T) {
 	})
 	defer server.Close()
 
-	err := client.Streaming.ReportContext(context.Background(), "uuid-123", map[string]interface{}{
+	err := client.Streaming.ReportContext(context.Background(), "uuid-123", map[string]any{
 		"contentGroupType": "album",
 		"contentGroupId":   "abc",
 	})
@@ -300,7 +300,7 @@ func TestStreamingReportContext(t *testing.T) {
 }
 
 func TestStreamingDynamicSuggest(t *testing.T) {
-	var capturedBody map[string]interface{}
+	var capturedBody map[string]any
 
 	server, client := testServerAndClient(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/dynamic/suggest" {
@@ -309,9 +309,9 @@ func TestStreamingDynamicSuggest(t *testing.T) {
 		body, _ := io.ReadAll(r.Body)
 		json.Unmarshal(body, &capturedBody)
 
-		resp := map[string]interface{}{
+		resp := map[string]any{
 			"algorithm": "collaborative",
-			"tracks":    map[string]interface{}{"limit": 10, "items": []interface{}{}},
+			"tracks":    map[string]any{"limit": 10, "items": []any{}},
 		}
 		w.WriteHeader(200)
 		json.NewEncoder(w).Encode(resp)
@@ -351,7 +351,7 @@ func TestStreamingQualityMapping(t *testing.T) {
 
 		server, client := testServerAndClient(func(w http.ResponseWriter, r *http.Request) {
 			capturedFormatID = r.URL.Query().Get("format_id")
-			resp := map[string]interface{}{
+			resp := map[string]any{
 				"track_id":     100,
 				"format_id":    tt.formatID,
 				"url_template": "https://example.com/$SEGMENT$",
