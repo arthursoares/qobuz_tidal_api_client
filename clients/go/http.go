@@ -99,7 +99,7 @@ func (t *transport) postForm(ctx context.Context, endpoint string, data map[stri
 }
 
 // postJSON performs a POST request with a JSON body.
-func (t *transport) postJSON(ctx context.Context, endpoint string, body interface{}) ([]byte, error) {
+func (t *transport) postJSON(ctx context.Context, endpoint string, body any) ([]byte, error) {
 	if err := t.limiter.Wait(ctx); err != nil {
 		return nil, fmt.Errorf("rate limiter: %w", err)
 	}
