@@ -17,7 +17,7 @@ func TestCatalogGetAlbum(t *testing.T) {
 			t.Errorf("album_id = %q, want p0d55tt7gv3lc", r.URL.Query().Get("album_id"))
 		}
 
-		resp := map[string]interface{}{
+		resp := map[string]any{
 			"id":                    "p0d55tt7gv3lc",
 			"title":                 "Virgin Lake",
 			"version":              nil,
@@ -30,9 +30,9 @@ func TestCatalogGetAlbum(t *testing.T) {
 			"downloadable":          true,
 			"hires":                 true,
 			"hires_streamable":      true,
-			"artist":                map[string]interface{}{"id": 11162390, "name": "Philine Sonny"},
-			"artists":               []interface{}{},
-			"image":                 map[string]interface{}{},
+			"artist":                map[string]any{"id": 11162390, "name": "Philine Sonny"},
+			"artists":               []any{},
+			"image":                 map[string]any{},
 		}
 		w.WriteHeader(200)
 		json.NewEncoder(w).Encode(resp)
@@ -64,11 +64,11 @@ func TestCatalogSearchAlbums(t *testing.T) {
 			t.Errorf("query = %q, want radiohead", r.URL.Query().Get("query"))
 		}
 
-		resp := map[string]interface{}{
-			"albums": map[string]interface{}{
-				"items": []interface{}{
-					map[string]interface{}{"id": "a1", "title": "OK Computer"},
-					map[string]interface{}{"id": "a2", "title": "Kid A"},
+		resp := map[string]any{
+			"albums": map[string]any{
+				"items": []any{
+					map[string]any{"id": "a1", "title": "OK Computer"},
+					map[string]any{"id": "a2", "title": "Kid A"},
 				},
 				"total":  2,
 				"limit":  50,
@@ -99,17 +99,17 @@ func TestCatalogGetTrack(t *testing.T) {
 			t.Errorf("path = %q, want /track/get", r.URL.Path)
 		}
 
-		resp := map[string]interface{}{
+		resp := map[string]any{
 			"id":               33967376,
 			"title":            "Test Track",
 			"duration":         245,
 			"track_number":     3,
 			"media_number":     1,
 			"parental_warning": false,
-			"performer":        map[string]interface{}{"id": 1, "name": "Artist"},
-			"album":            map[string]interface{}{"id": "abc", "title": "Album"},
-			"audio_info":       map[string]interface{}{"maximum_bit_depth": 24, "maximum_channel_count": 2, "maximum_sampling_rate": 96.0},
-			"rights":           map[string]interface{}{"streamable": true, "downloadable": true},
+			"performer":        map[string]any{"id": 1, "name": "Artist"},
+			"album":            map[string]any{"id": "abc", "title": "Album"},
+			"audio_info":       map[string]any{"maximum_bit_depth": 24, "maximum_channel_count": 2, "maximum_sampling_rate": 96.0},
+			"rights":           map[string]any{"streamable": true, "downloadable": true},
 		}
 		w.WriteHeader(200)
 		json.NewEncoder(w).Encode(resp)
@@ -145,26 +145,26 @@ func TestCatalogGetTracks(t *testing.T) {
 			t.Fatalf("read body: %v", err)
 		}
 
-		resp := map[string]interface{}{
-			"tracks": map[string]interface{}{
-				"items": []interface{}{
-					map[string]interface{}{
+		resp := map[string]any{
+			"tracks": map[string]any{
+				"items": []any{
+					map[string]any{
 						"id":         100,
 						"title":      "Track 1",
 						"duration":   200,
-						"performer":  map[string]interface{}{"id": 1, "name": "A"},
-						"album":      map[string]interface{}{"id": "x", "title": "Y"},
-						"audio_info": map[string]interface{}{},
-						"rights":     map[string]interface{}{},
+						"performer":  map[string]any{"id": 1, "name": "A"},
+						"album":      map[string]any{"id": "x", "title": "Y"},
+						"audio_info": map[string]any{},
+						"rights":     map[string]any{},
 					},
-					map[string]interface{}{
+					map[string]any{
 						"id":         200,
 						"title":      "Track 2",
 						"duration":   300,
-						"performer":  map[string]interface{}{"id": 2, "name": "B"},
-						"album":      map[string]interface{}{"id": "x", "title": "Y"},
-						"audio_info": map[string]interface{}{},
-						"rights":     map[string]interface{}{},
+						"performer":  map[string]any{"id": 2, "name": "B"},
+						"album":      map[string]any{"id": "x", "title": "Y"},
+						"audio_info": map[string]any{},
+						"rights":     map[string]any{},
 					},
 				},
 			},
@@ -184,7 +184,7 @@ func TestCatalogGetTracks(t *testing.T) {
 	}
 
 	// Verify JSON body contains tracks_id
-	var body map[string]interface{}
+	var body map[string]any
 	if err := json.Unmarshal(capturedBody, &body); err != nil {
 		t.Fatalf("unmarshal body: %v", err)
 	}
@@ -227,15 +227,15 @@ func TestCatalogSuggestAlbum(t *testing.T) {
 			t.Errorf("path = %q, want /album/suggest", r.URL.Path)
 		}
 
-		resp := map[string]interface{}{
-			"albums": map[string]interface{}{
-				"items": []interface{}{
-					map[string]interface{}{
+		resp := map[string]any{
+			"albums": map[string]any{
+				"items": []any{
+					map[string]any{
 						"id":                    "s1",
 						"title":                 "Similar Album",
-						"artist":                map[string]interface{}{"id": 5, "name": "Similar Artist"},
-						"artists":               []interface{}{},
-						"image":                 map[string]interface{}{},
+						"artist":                map[string]any{"id": 5, "name": "Similar Artist"},
+						"artists":               []any{},
+						"image":                 map[string]any{},
 						"duration":              1800,
 						"tracks_count":          8,
 						"maximum_bit_depth":     16,
@@ -276,9 +276,9 @@ func TestCatalogGetArtistReleases(t *testing.T) {
 			t.Errorf("artist_id = %q, want 12345", r.URL.Query().Get("artist_id"))
 		}
 
-		resp := map[string]interface{}{
+		resp := map[string]any{
 			"has_more": true,
-			"items":    []interface{}{map[string]interface{}{"id": "r1", "title": "Release 1"}},
+			"items":    []any{map[string]any{"id": "r1", "title": "Release 1"}},
 		}
 		w.WriteHeader(200)
 		json.NewEncoder(w).Encode(resp)
@@ -304,9 +304,9 @@ func TestCatalogSearchArtists(t *testing.T) {
 			t.Errorf("path = %q, want /artist/search", r.URL.Path)
 		}
 
-		resp := map[string]interface{}{
-			"artists": map[string]interface{}{
-				"items":  []interface{}{map[string]interface{}{"id": 1, "name": "Test Artist"}},
+		resp := map[string]any{
+			"artists": map[string]any{
+				"items":  []any{map[string]any{"id": 1, "name": "Test Artist"}},
 				"total":  1,
 				"limit":  50,
 				"offset": 0,
@@ -342,7 +342,7 @@ func TestCatalogGetAlbumStory(t *testing.T) {
 			t.Errorf("limit = %q, want 10", r.URL.Query().Get("limit"))
 		}
 
-		resp := map[string]interface{}{
+		resp := map[string]any{
 			"story": "Editorial content about this album.",
 		}
 		w.WriteHeader(200)
@@ -355,7 +355,7 @@ func TestCatalogGetAlbumStory(t *testing.T) {
 		t.Fatalf("GetAlbumStory: %v", err)
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal(data, &result); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -370,9 +370,9 @@ func TestCatalogSearchTracks(t *testing.T) {
 			t.Errorf("path = %q, want /track/search", r.URL.Path)
 		}
 
-		resp := map[string]interface{}{
-			"tracks": map[string]interface{}{
-				"items":  []interface{}{},
+		resp := map[string]any{
+			"tracks": map[string]any{
+				"items":  []any{},
 				"total":  0,
 				"limit":  50,
 				"offset": 0,

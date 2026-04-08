@@ -35,7 +35,7 @@ func testServerAndClient(handler http.HandlerFunc) (*httptest.Server, *Client) {
 }
 
 // mustJSON marshals v to JSON bytes. Panics on error.
-func mustJSON(v interface{}) []byte {
+func mustJSON(v any) []byte {
 	b, err := json.Marshal(v)
 	if err != nil {
 		panic(err)
