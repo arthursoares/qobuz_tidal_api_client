@@ -188,9 +188,9 @@ func (u *UserSummary) UnmarshalJSON(data []byte) error {
 
 // Award represents an editorial award for an album.
 type Award struct {
-	ID        int     `json:"id"`
-	Name      string  `json:"name"`
-	AwardedAt *string `json:"awarded_at"`
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	AwardedAt any    `json:"awarded_at"` // string date or numeric timestamp
 }
 
 // Album represents a full album response from the Qobuz API.
