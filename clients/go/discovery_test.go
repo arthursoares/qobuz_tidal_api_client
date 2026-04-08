@@ -13,11 +13,11 @@ func TestDiscoveryListGenres(t *testing.T) {
 			t.Errorf("path = %q, want /genre/list", r.URL.Path)
 		}
 
-		resp := map[string]interface{}{
-			"genres": map[string]interface{}{
-				"items": []interface{}{
-					map[string]interface{}{"id": 112, "color": "#5eabc1", "name": "Pop/Rock", "path": []int{112}, "slug": "pop-rock"},
-					map[string]interface{}{"id": 113, "color": "#ff0000", "name": "Alternative", "path": []int{112, 113}, "slug": "alternative"},
+		resp := map[string]any{
+			"genres": map[string]any{
+				"items": []any{
+					map[string]any{"id": 112, "color": "#5eabc1", "name": "Pop/Rock", "path": []int{112}, "slug": "pop-rock"},
+					map[string]any{"id": 113, "color": "#ff0000", "name": "Alternative", "path": []int{112, 113}, "slug": "alternative"},
 				},
 			},
 		}
@@ -51,10 +51,10 @@ func TestDiscoveryGetIndex(t *testing.T) {
 			t.Errorf("genre_ids = %q, want 112", r.URL.Query().Get("genre_ids"))
 		}
 
-		resp := map[string]interface{}{
-			"containers": map[string]interface{}{
-				"new_releases": map[string]interface{}{"id": "newReleases"},
-				"playlists":    map[string]interface{}{"id": "playlists"},
+		resp := map[string]any{
+			"containers": map[string]any{
+				"new_releases": map[string]any{"id": "newReleases"},
+				"playlists":    map[string]any{"id": "playlists"},
 			},
 		}
 		w.WriteHeader(200)
@@ -67,7 +67,7 @@ func TestDiscoveryGetIndex(t *testing.T) {
 		t.Fatalf("GetIndex: %v", err)
 	}
 
-	var containers map[string]interface{}
+	var containers map[string]any
 	if err := json.Unmarshal(raw, &containers); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -82,11 +82,11 @@ func TestDiscoveryNewReleases(t *testing.T) {
 			t.Errorf("path = %q, want /discover/newReleases", r.URL.Path)
 		}
 
-		resp := map[string]interface{}{
+		resp := map[string]any{
 			"has_more": true,
-			"items": []interface{}{
-				map[string]interface{}{"id": "nr1", "title": "New Release 1"},
-				map[string]interface{}{"id": "nr2", "title": "New Release 2"},
+			"items": []any{
+				map[string]any{"id": "nr1", "title": "New Release 1"},
+				map[string]any{"id": "nr2", "title": "New Release 2"},
 			},
 		}
 		w.WriteHeader(200)
@@ -116,9 +116,9 @@ func TestDiscoveryCuratedPlaylists(t *testing.T) {
 		}
 		capturedTags = r.URL.Query().Get("tags")
 
-		resp := map[string]interface{}{
+		resp := map[string]any{
 			"has_more": false,
-			"items":    []interface{}{},
+			"items":    []any{},
 		}
 		w.WriteHeader(200)
 		json.NewEncoder(w).Encode(resp)
@@ -145,9 +145,9 @@ func TestDiscoveryIdealDiscography(t *testing.T) {
 			t.Errorf("path = %q, want /discover/idealDiscography", r.URL.Path)
 		}
 
-		resp := map[string]interface{}{
+		resp := map[string]any{
 			"has_more": false,
-			"items":    []interface{}{map[string]interface{}{"id": "id1"}},
+			"items":    []any{map[string]any{"id": "id1"}},
 		}
 		w.WriteHeader(200)
 		json.NewEncoder(w).Encode(resp)
@@ -170,9 +170,9 @@ func TestDiscoveryAlbumOfTheWeek(t *testing.T) {
 			t.Errorf("path = %q, want /discover/albumOfTheWeek", r.URL.Path)
 		}
 
-		resp := map[string]interface{}{
+		resp := map[string]any{
 			"has_more": false,
-			"items":    []interface{}{},
+			"items":    []any{},
 		}
 		w.WriteHeader(200)
 		json.NewEncoder(w).Encode(resp)
@@ -194,9 +194,9 @@ func TestDiscoveryGenreIDsParam(t *testing.T) {
 
 	server, client := testServerAndClient(func(w http.ResponseWriter, r *http.Request) {
 		capturedGenreIDs = r.URL.Query().Get("genre_ids")
-		resp := map[string]interface{}{
+		resp := map[string]any{
 			"has_more": false,
-			"items":    []interface{}{},
+			"items":    []any{},
 		}
 		w.WriteHeader(200)
 		json.NewEncoder(w).Encode(resp)

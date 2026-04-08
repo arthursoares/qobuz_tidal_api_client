@@ -113,9 +113,12 @@ async def exchange_code(code: str) -> dict:
 
 
 def save_credentials(creds: dict) -> Path:
-    """Save credentials to ~/.config/qobuz/credentials.json."""
+    """Save credentials to ~/.config/qobuz/credentials.json with restrictive permissions."""
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    CREDENTIALS_FILE.write_text(json.dumps(creds, indent=2))
+    import os
+    fd = os.open(str(CREDENTIALS_FILE), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump(creds, f, indent=2)
     return CREDENTIALS_FILE
 
 
@@ -147,7 +150,10 @@ async def login(port: int = 11111, no_browser: bool = False) -> dict:
         code = extract_code_from_url(redirect_url)
     else:
         print(f"Opening browser for Qobuz login...")
-        webbrowser.open(url)
+        opened = webbrowser.open(url)
+        if not opened:
+            print(f"\nCould not open browser. Open this URL manually:\n")
+            print(f"  {url}\n")
         print(f"Waiting for callback on localhost:{port}...")
         code = await asyncio.to_thread(wait_for_callback, port)
 

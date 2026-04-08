@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"time"
 	"testing"
 )
 
@@ -76,11 +78,25 @@ func TestExtractCodeFromURL(t *testing.T) {
 	}
 }
 
+// waitForPort retries connecting until the port is listening or timeout.
+func waitForPort(t *testing.T, port int) {
+	t.Helper()
+	for i := 0; i < 50; i++ {
+		conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", port))
+		if err == nil {
+			conn.Close()
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("port %d never became available", port)
+}
+
 func TestWaitForCallback(t *testing.T) {
 	port := 18767
 
 	go func() {
-		// Send a fake callback after the server starts
+		waitForPort(t, port)
 		resp, err := http.Get(fmt.Sprintf("http://localhost:%d/callback?code_autorisation=test_code_456", port))
 		if err != nil {
 			t.Logf("callback request error (may be expected): %v", err)
@@ -102,6 +118,7 @@ func TestWaitForCallbackMissingCode(t *testing.T) {
 	port := 18768
 
 	go func() {
+		waitForPort(t, port)
 		resp, err := http.Get(fmt.Sprintf("http://localhost:%d/callback?bad=param", port))
 		if err != nil {
 			return
