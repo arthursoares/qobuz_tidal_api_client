@@ -55,11 +55,18 @@ class QobuzClient:
         """
         from .auth import load_credentials, CREDENTIALS_FILE
 
-        path = Path(credentials_path) if credentials_path else CREDENTIALS_FILE
-        creds = json.loads(path.read_text()) if path.exists() else load_credentials()
+        if credentials_path is not None:
+            path = Path(credentials_path)
+            if not path.exists():
+                raise FileNotFoundError(
+                    f"Credentials file not found: {path}"
+                )
+            creds = json.loads(path.read_text())
+        else:
+            creds = load_credentials()
         if not creds:
             raise FileNotFoundError(
-                f"No credentials found at {path}. Run: qobuz login"
+                f"No credentials found at {CREDENTIALS_FILE}. Run: qobuz login"
             )
         return cls(
             app_id=creds["app_id"],
