@@ -87,10 +87,36 @@ type Genre struct {
 }
 
 // AudioInfo holds audio quality metadata for a track.
+// Zero values are replaced with sensible defaults (16-bit, 2ch, 44.1kHz)
+// since the API can return empty objects.
 type AudioInfo struct {
-	MaximumBitDepth      int     `json:"maximum_bit_depth"`
-	MaximumChannelCount  int     `json:"maximum_channel_count"`
-	MaximumSamplingRate  float64 `json:"maximum_sampling_rate"`
+	MaximumBitDepth     int     `json:"maximum_bit_depth"`
+	MaximumChannelCount int     `json:"maximum_channel_count"`
+	MaximumSamplingRate float64 `json:"maximum_sampling_rate"`
+}
+
+// UnmarshalJSON applies sensible defaults when fields are zero/missing.
+func (a *AudioInfo) UnmarshalJSON(data []byte) error {
+	type alias AudioInfo
+	tmp := alias{
+		MaximumBitDepth:     16,
+		MaximumChannelCount: 2,
+		MaximumSamplingRate: 44.1,
+	}
+	if err := json.Unmarshal(data, &tmp); err != nil {
+		return err
+	}
+	if tmp.MaximumBitDepth == 0 {
+		tmp.MaximumBitDepth = 16
+	}
+	if tmp.MaximumChannelCount == 0 {
+		tmp.MaximumChannelCount = 2
+	}
+	if tmp.MaximumSamplingRate == 0 {
+		tmp.MaximumSamplingRate = 44.1
+	}
+	*a = AudioInfo(tmp)
+	return nil
 }
 
 // Rights describes what operations are permitted on a resource.
@@ -233,19 +259,54 @@ func (a Album) MarshalJSON() ([]byte, error) {
 }
 
 // Track represents a full track response from the Qobuz API.
+// TrackNumber and DiscNumber are extracted from the nested physical_support
+// object (where the API puts them), falling back to top-level fields.
 type Track struct {
 	ID          int           `json:"id"`
 	Title       string        `json:"title"`
 	Version     *string       `json:"version"`
 	Duration    int           `json:"duration"`
-	TrackNumber int           `json:"track_number"`
-	DiscNumber  int           `json:"media_number"`
+	TrackNumber int           `json:"-"` // parsed from physical_support.track_number
+	DiscNumber  int           `json:"-"` // parsed from physical_support.media_number
 	Explicit    bool          `json:"parental_warning"`
 	Performer   ArtistSummary `json:"performer"`
 	Album       AlbumSummary  `json:"album"`
 	AudioInfo   AudioInfo     `json:"audio_info"`
 	Rights      Rights        `json:"rights"`
 	ISRC        *string       `json:"isrc"`
+}
+
+// UnmarshalJSON extracts track/disc numbers from physical_support if present,
+// falling back to top-level track_number/media_number fields.
+func (t *Track) UnmarshalJSON(data []byte) error {
+	// Use an alias to avoid infinite recursion.
+	type alias Track
+	tmp := struct {
+		alias
+		PhysicalSupport struct {
+			TrackNumber int `json:"track_number"`
+			MediaNumber int `json:"media_number"`
+		} `json:"physical_support"`
+		TopTrackNumber int `json:"track_number"`
+		TopMediaNumber int `json:"media_number"`
+	}{}
+	if err := json.Unmarshal(data, &tmp); err != nil {
+		return err
+	}
+	*t = Track(tmp.alias)
+	// Prefer physical_support values, fall back to top-level.
+	t.TrackNumber = tmp.PhysicalSupport.TrackNumber
+	if t.TrackNumber == 0 {
+		t.TrackNumber = tmp.TopTrackNumber
+	}
+	t.DiscNumber = tmp.PhysicalSupport.MediaNumber
+	if t.DiscNumber == 0 {
+		t.DiscNumber = tmp.TopMediaNumber
+	}
+	if t.DiscNumber == 0 {
+		t.DiscNumber = 1
+	}
+	return nil
 }
 
 // PlaylistTracks holds the nested tracks response from a playlist.

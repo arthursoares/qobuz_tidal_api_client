@@ -18,7 +18,7 @@ func TestPlaylistsCreate(t *testing.T) {
 		capturedName = r.PostForm.Get("name")
 		capturedIsPublic = r.PostForm.Get("is_public")
 
-		resp := map[string]interface{}{
+		resp := map[string]any{
 			"id":               61997651,
 			"name":             "My New Playlist",
 			"description":      "A test playlist",
@@ -30,7 +30,7 @@ func TestPlaylistsCreate(t *testing.T) {
 			"public_at":        false,
 			"created_at":       1775635602,
 			"updated_at":       1775635602,
-			"owner":            map[string]interface{}{"id": 1, "name": "testuser"},
+			"owner":            map[string]any{"id": 1, "name": "testuser"},
 		}
 		w.WriteHeader(200)
 		json.NewEncoder(w).Encode(resp)
@@ -123,7 +123,7 @@ func TestPlaylistsUpdate(t *testing.T) {
 		capturedName = r.PostForm.Get("name")
 		capturedDesc = r.PostForm.Get("description")
 
-		resp := map[string]interface{}{
+		resp := map[string]any{
 			"id":               100,
 			"name":             "Updated Name",
 			"description":      "Updated Desc",
@@ -135,7 +135,7 @@ func TestPlaylistsUpdate(t *testing.T) {
 			"public_at":        false,
 			"created_at":       1000,
 			"updated_at":       2000,
-			"owner":            map[string]interface{}{"id": 1, "name": "user"},
+			"owner":            map[string]any{"id": 1, "name": "user"},
 		}
 		w.WriteHeader(200)
 		json.NewEncoder(w).Encode(resp)
@@ -168,9 +168,9 @@ func TestPlaylistsList(t *testing.T) {
 		if r.URL.Path != "/playlist/getUserPlaylists" {
 			t.Errorf("path = %q, want /playlist/getUserPlaylists", r.URL.Path)
 		}
-		resp := map[string]interface{}{
-			"playlists": map[string]interface{}{
-				"items":  []interface{}{map[string]interface{}{"id": 1, "name": "pl1"}},
+		resp := map[string]any{
+			"playlists": map[string]any{
+				"items":  []any{map[string]any{"id": 1, "name": "pl1"}},
 				"total":  1,
 				"limit":  500,
 				"offset": 0,
@@ -200,7 +200,7 @@ func TestPlaylistsGetWithTracks(t *testing.T) {
 			t.Errorf("extra = %q, want tracks", r.URL.Query().Get("extra"))
 		}
 
-		resp := map[string]interface{}{
+		resp := map[string]any{
 			"id":               42,
 			"name":             "My Playlist",
 			"description":      "desc",
@@ -212,26 +212,26 @@ func TestPlaylistsGetWithTracks(t *testing.T) {
 			"public_at":        false,
 			"created_at":       1000,
 			"updated_at":       2000,
-			"owner":            map[string]interface{}{"id": 1, "name": "user"},
-			"tracks": map[string]interface{}{
-				"items": []interface{}{
-					map[string]interface{}{
+			"owner":            map[string]any{"id": 1, "name": "user"},
+			"tracks": map[string]any{
+				"items": []any{
+					map[string]any{
 						"id":         100,
 						"title":      "Track A",
 						"duration":   200,
-						"performer":  map[string]interface{}{"id": 1, "name": "Artist A"},
-						"album":      map[string]interface{}{"id": "x", "title": "Album X"},
-						"audio_info": map[string]interface{}{},
-						"rights":     map[string]interface{}{},
+						"performer":  map[string]any{"id": 1, "name": "Artist A"},
+						"album":      map[string]any{"id": "x", "title": "Album X"},
+						"audio_info": map[string]any{},
+						"rights":     map[string]any{},
 					},
-					map[string]interface{}{
+					map[string]any{
 						"id":         200,
 						"title":      "Track B",
 						"duration":   300,
-						"performer":  map[string]interface{}{"id": 2, "name": "Artist B"},
-						"album":      map[string]interface{}{"id": "y", "title": "Album Y"},
-						"audio_info": map[string]interface{}{},
-						"rights":     map[string]interface{}{},
+						"performer":  map[string]any{"id": 2, "name": "Artist B"},
+						"album":      map[string]any{"id": "y", "title": "Album Y"},
+						"audio_info": map[string]any{},
+						"rights":     map[string]any{},
 					},
 				},
 				"total":  2,
@@ -278,7 +278,7 @@ func TestPlaylistsGetWithOptions(t *testing.T) {
 			t.Errorf("limit = %q, want 25", r.URL.Query().Get("limit"))
 		}
 
-		resp := map[string]interface{}{
+		resp := map[string]any{
 			"id":               42,
 			"name":             "Test",
 			"description":      "",
@@ -290,7 +290,7 @@ func TestPlaylistsGetWithOptions(t *testing.T) {
 			"public_at":        false,
 			"created_at":       1000,
 			"updated_at":       2000,
-			"owner":            map[string]interface{}{"id": 1, "name": "user"},
+			"owner":            map[string]any{"id": 1, "name": "user"},
 		}
 		w.WriteHeader(200)
 		json.NewEncoder(w).Encode(resp)
@@ -315,9 +315,9 @@ func TestPlaylistsSearch(t *testing.T) {
 		if r.URL.Query().Get("query") != "jazz" {
 			t.Errorf("query = %q, want jazz", r.URL.Query().Get("query"))
 		}
-		resp := map[string]interface{}{
-			"playlists": map[string]interface{}{
-				"items":  []interface{}{},
+		resp := map[string]any{
+			"playlists": map[string]any{
+				"items":  []any{},
 				"total":  0,
 				"limit":  50,
 				"offset": 0,
