@@ -17,7 +17,6 @@ import (
 const (
 	defaultAppID        = "304027809"
 	defaultPrivateKey   = "6lz8C03UDIC7"
-	defaultCallbackPort = 11111
 )
 
 // Credentials holds the authenticated user's Qobuz credentials.
