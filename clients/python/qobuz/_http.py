@@ -78,7 +78,8 @@ class HttpTransport:
         """
         url = f"{BASE_URL}/{endpoint}"
         async with self._limiter:
-            assert self._session is not None, "Use HttpTransport as an async context manager"
+            if self._session is None:
+                raise RuntimeError("HttpTransport must be used as an async context manager")
             async with self._session.get(url, params=params) as resp:
                 status = resp.status
                 body = await resp.json()
@@ -100,7 +101,8 @@ class HttpTransport:
         """
         url = f"{BASE_URL}/{endpoint}"
         async with self._limiter:
-            assert self._session is not None, "Use HttpTransport as an async context manager"
+            if self._session is None:
+                raise RuntimeError("HttpTransport must be used as an async context manager")
             async with self._session.post(url, data=data) as resp:
                 status = resp.status
                 body = await resp.json()
@@ -122,7 +124,8 @@ class HttpTransport:
         """
         url = f"{BASE_URL}/{endpoint}"
         async with self._limiter:
-            assert self._session is not None, "Use HttpTransport as an async context manager"
+            if self._session is None:
+                raise RuntimeError("HttpTransport must be used as an async context manager")
             async with self._session.post(url, json=json_body) as resp:
                 status = resp.status
                 body = await resp.json()

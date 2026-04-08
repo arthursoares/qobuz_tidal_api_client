@@ -23,6 +23,7 @@ from .types import (
     ImageSet,
     Label,
     LastUpdate,
+    PaginatedResult,
     Playlist,
     Rights,
     Session,
@@ -36,5 +37,5 @@ __all__ = [
     "NonStreamableError", "NotFoundError", "RateLimitError",
     "Album", "AlbumSummary", "ArtistRole", "ArtistSummary", "AudioInfo", "Award",
     "FavoriteIds", "FileUrl", "Genre", "ImageSet", "Label", "LastUpdate",
-    "Playlist", "Rights", "Session", "Track", "UserSummary",
+    "PaginatedResult", "Playlist", "Rights", "Session", "Track", "UserSummary",
 ]

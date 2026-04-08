@@ -72,7 +72,7 @@ class PlaylistsAPI:
     async def add_tracks(
         self,
         playlist_id: int | str,
-        track_ids: list[int],
+        track_ids: list[int | str],
         no_duplicate: bool = False,
     ) -> None:
         """Add tracks to a playlist, auto-batching in chunks of 50."""
