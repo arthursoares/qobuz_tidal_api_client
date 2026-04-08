@@ -164,6 +164,72 @@ func TestTrackUnmarshal(t *testing.T) {
 	}
 }
 
+func TestTrackPhysicalSupport(t *testing.T) {
+	// Real Qobuz responses nest track/disc numbers under physical_support.
+	raw := `{
+		"id": 33967376,
+		"title": "Blitzkrieg Bop",
+		"duration": 133,
+		"parental_warning": false,
+		"performer": {"id": 47434, "name": "Ramones"},
+		"album": {"id": "0603497873012", "title": "Ramones", "image": {}},
+		"physical_support": {"track_number": 5, "media_number": 2},
+		"audio_info": {"maximum_bit_depth": 24, "maximum_channel_count": 2, "maximum_sampling_rate": 96.0},
+		"rights": {"streamable": true}
+	}`
+
+	var track Track
+	if err := json.Unmarshal([]byte(raw), &track); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if track.TrackNumber != 5 {
+		t.Errorf("TrackNumber = %d, want 5 (from physical_support)", track.TrackNumber)
+	}
+	if track.DiscNumber != 2 {
+		t.Errorf("DiscNumber = %d, want 2 (from physical_support)", track.DiscNumber)
+	}
+}
+
+func TestTrackDiscNumberDefaultsTo1(t *testing.T) {
+	// When neither physical_support nor top-level media_number is set, default to 1.
+	raw := `{
+		"id": 1,
+		"title": "Test",
+		"duration": 100,
+		"performer": {"id": 1, "name": "Artist"},
+		"album": {"id": "1", "title": "Album", "image": {}},
+		"audio_info": {},
+		"rights": {}
+	}`
+
+	var track Track
+	if err := json.Unmarshal([]byte(raw), &track); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if track.DiscNumber != 1 {
+		t.Errorf("DiscNumber = %d, want 1 (default)", track.DiscNumber)
+	}
+}
+
+func TestAudioInfoEmptyDefaults(t *testing.T) {
+	// Empty audio_info object should get sensible defaults, not zeros.
+	raw := `{}`
+
+	var ai AudioInfo
+	if err := json.Unmarshal([]byte(raw), &ai); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if ai.MaximumBitDepth != 16 {
+		t.Errorf("MaximumBitDepth = %d, want 16 (default)", ai.MaximumBitDepth)
+	}
+	if ai.MaximumChannelCount != 2 {
+		t.Errorf("MaximumChannelCount = %d, want 2 (default)", ai.MaximumChannelCount)
+	}
+	if ai.MaximumSamplingRate != 44.1 {
+		t.Errorf("MaximumSamplingRate = %f, want 44.1 (default)", ai.MaximumSamplingRate)
+	}
+}
+
 func TestPlaylistUnmarshal(t *testing.T) {
 	raw := `{
 		"id": 61997651,
