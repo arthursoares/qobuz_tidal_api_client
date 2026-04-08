@@ -248,20 +248,29 @@ type Track struct {
 	ISRC        *string       `json:"isrc"`
 }
 
+// PlaylistTracks holds the nested tracks response from a playlist.
+type PlaylistTracks struct {
+	Items  []Track `json:"items"`
+	Total  int     `json:"total"`
+	Limit  int     `json:"limit"`
+	Offset int     `json:"offset"`
+}
+
 // Playlist represents a Qobuz playlist.
 type Playlist struct {
-	ID              int         `json:"id"`
-	Name            string      `json:"name"`
-	Description     string      `json:"description"`
-	TracksCount     int         `json:"tracks_count"`
-	UsersCount      int         `json:"users_count"`
-	Duration        int         `json:"duration"`
-	IsPublic        bool        `json:"is_public"`
-	IsCollaborative bool        `json:"is_collaborative"`
-	PublicAt        any `json:"public_at"` // int (unix timestamp) or bool (false)
-	CreatedAt       int         `json:"created_at"`
-	UpdatedAt       int         `json:"updated_at"`
-	Owner           UserSummary `json:"owner"`
+	ID              int              `json:"id"`
+	Name            string           `json:"name"`
+	Description     string           `json:"description"`
+	TracksCount     int              `json:"tracks_count"`
+	UsersCount      int              `json:"users_count"`
+	Duration        int              `json:"duration"`
+	IsPublic        bool             `json:"is_public"`
+	IsCollaborative bool             `json:"is_collaborative"`
+	PublicAt        any              `json:"public_at"` // int (unix timestamp) or bool (false)
+	CreatedAt       int              `json:"created_at"`
+	UpdatedAt       int              `json:"updated_at"`
+	Owner           UserSummary      `json:"owner"`
+	Tracks          *PlaylistTracks  `json:"tracks,omitempty"`
 }
 
 // FavoriteIds holds all favorite resource IDs.
@@ -326,8 +335,12 @@ type FileUrl struct {
 	TrackID      int               `json:"track_id"`
 	FormatID     int               `json:"format_id"`
 	MimeType     string            `json:"mime_type"`
+	FileType     string            `json:"file_type"`
+	AudioFileID  int               `json:"audio_file_id"`
 	SamplingRate int               `json:"sampling_rate"`
 	BitsDepth    int               `json:"bits_depth"`
+	NChannels    int               `json:"n_channels"`
+	NSamples     int               `json:"n_samples"`
 	Duration     float64           `json:"duration"`
 	URLTemplate  string            `json:"url_template"`
 	NSegments    int               `json:"n_segments"`
@@ -424,6 +437,13 @@ type FavoriteAlbums struct {
 	Total  int
 	Limit  int
 	Offset int
+}
+
+// PlaylistGetOptions holds optional parameters for Playlists.Get.
+type PlaylistGetOptions struct {
+	Extra  string // e.g. "tracks", "track_ids,getSimilarPlaylists"
+	Offset int
+	Limit  int
 }
 
 // PlaylistUpdateOptions holds optional fields for updating a playlist.

@@ -327,6 +327,43 @@ func TestCatalogSearchArtists(t *testing.T) {
 	}
 }
 
+func TestCatalogGetAlbumStory(t *testing.T) {
+	server, client := testServerAndClient(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/album/story" {
+			t.Errorf("path = %q, want /album/story", r.URL.Path)
+		}
+		if r.URL.Query().Get("album_id") != "p0d55tt7gv3lc" {
+			t.Errorf("album_id = %q, want p0d55tt7gv3lc", r.URL.Query().Get("album_id"))
+		}
+		if r.URL.Query().Get("offset") != "0" {
+			t.Errorf("offset = %q, want 0", r.URL.Query().Get("offset"))
+		}
+		if r.URL.Query().Get("limit") != "10" {
+			t.Errorf("limit = %q, want 10", r.URL.Query().Get("limit"))
+		}
+
+		resp := map[string]interface{}{
+			"story": "Editorial content about this album.",
+		}
+		w.WriteHeader(200)
+		json.NewEncoder(w).Encode(resp)
+	})
+	defer server.Close()
+
+	data, err := client.Catalog.GetAlbumStory(context.Background(), "p0d55tt7gv3lc")
+	if err != nil {
+		t.Fatalf("GetAlbumStory: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if result["story"] != "Editorial content about this album." {
+		t.Errorf("story = %v, want editorial content", result["story"])
+	}
+}
+
 func TestCatalogSearchTracks(t *testing.T) {
 	server, client := testServerAndClient(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/track/search" {
