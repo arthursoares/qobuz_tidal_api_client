@@ -91,7 +91,7 @@ func TestFavoritesGetIDs(t *testing.T) {
 		if r.URL.Path != "/favorite/getUserFavoriteIds" {
 			t.Errorf("path = %q, want /favorite/getUserFavoriteIds", r.URL.Path)
 		}
-		resp := map[string]interface{}{
+		resp := map[string]any{
 			"albums":  []string{"a1", "a2"},
 			"tracks":  []int{100, 200},
 			"artists": []int{10},
@@ -125,15 +125,15 @@ func TestFavoritesGetAlbums(t *testing.T) {
 			t.Errorf("type = %q, want albums", r.URL.Query().Get("type"))
 		}
 
-		resp := map[string]interface{}{
-			"albums": map[string]interface{}{
-				"items": []map[string]interface{}{
+		resp := map[string]any{
+			"albums": map[string]any{
+				"items": []map[string]any{
 					{
 						"id":                    "album-1",
 						"title":                 "Test Album",
-						"artist":                map[string]interface{}{"id": 1, "name": "Artist 1"},
-						"artists":               []interface{}{},
-						"image":                 map[string]interface{}{},
+						"artist":                map[string]any{"id": 1, "name": "Artist 1"},
+						"artists":               []any{},
+						"image":                 map[string]any{},
 						"duration":              3600,
 						"tracks_count":          10,
 						"maximum_bit_depth":     24,

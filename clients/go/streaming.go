@@ -104,13 +104,13 @@ func (s *StreamingService) StartSession(ctx context.Context) (*Session, error) {
 
 // ReportStart reports the start of track playback.
 func (s *StreamingService) ReportStart(ctx context.Context, trackID, formatID, userID int) error {
-	event := map[string]interface{}{
+	event := map[string]any{
 		"track_id":  trackID,
 		"date":      int(time.Now().Unix()),
 		"format_id": formatID,
 		"user_id":   userID,
 	}
-	eventsJSON, err := json.Marshal([]map[string]interface{}{event})
+	eventsJSON, err := json.Marshal([]map[string]any{event})
 	if err != nil {
 		return fmt.Errorf("marshal events: %w", err)
 	}
@@ -122,20 +122,20 @@ func (s *StreamingService) ReportStart(ctx context.Context, trackID, formatID, u
 }
 
 // ReportEnd reports the end of track playback.
-func (s *StreamingService) ReportEnd(ctx context.Context, events []map[string]interface{}) error {
-	body := map[string]interface{}{
+func (s *StreamingService) ReportEnd(ctx context.Context, events []map[string]any) error {
+	body := map[string]any{
 		"events":           events,
-		"renderer_context": map[string]interface{}{"software_version": "qobuz-sdk-0.1.0"},
+		"renderer_context": map[string]any{"software_version": "qobuz-sdk-0.1.0"},
 	}
 	_, err := s.t.postJSON(ctx, "track/reportStreamingEndJson", body)
 	return err
 }
 
 // ReportContext reports track playback context.
-func (s *StreamingService) ReportContext(ctx context.Context, trackContextUUID string, data map[string]interface{}) error {
-	body := map[string]interface{}{
+func (s *StreamingService) ReportContext(ctx context.Context, trackContextUUID string, data map[string]any) error {
+	body := map[string]any{
 		"version": "01.00",
-		"events": []map[string]interface{}{
+		"events": []map[string]any{
 			{
 				"track_context_uuid": trackContextUUID,
 				"data":               data,
@@ -148,7 +148,7 @@ func (s *StreamingService) ReportContext(ctx context.Context, trackContextUUID s
 
 // DynamicSuggest gets dynamic track suggestions based on listening history.
 func (s *StreamingService) DynamicSuggest(ctx context.Context, listenedTracksIDs []int, limit int) (json.RawMessage, error) {
-	data, err := s.t.postJSON(ctx, "dynamic/suggest", map[string]interface{}{
+	data, err := s.t.postJSON(ctx, "dynamic/suggest", map[string]any{
 		"listened_tracks_ids": listenedTracksIDs,
 		"limit":               limit,
 	})

@@ -150,7 +150,7 @@ func (s *CatalogService) GetTracks(ctx context.Context, trackIDs []int) ([]Track
 		return nil, nil
 	}
 
-	data, err := s.t.postJSON(ctx, "track/getList", map[string]interface{}{
+	data, err := s.t.postJSON(ctx, "track/getList", map[string]any{
 		"tracks_id": trackIDs,
 	})
 	if err != nil {
