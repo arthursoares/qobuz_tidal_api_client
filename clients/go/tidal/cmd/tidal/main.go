@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 
@@ -132,17 +133,16 @@ func cmdLogin() {
 		fmt.Print("> ")
 		scanner := bufio.NewScanner(os.Stdin)
 		scanner.Scan()
-		rawURL := scanner.Text()
-		// Extract ?code= from the URL
-		for _, part := range strings.Split(rawURL, "?") {
-			for _, param := range strings.Split(part, "&") {
-				if strings.HasPrefix(param, "code=") {
-					code = strings.TrimPrefix(param, "code=")
-				}
-			}
+		rawURL := strings.TrimSpace(scanner.Text())
+		// Parse the URL properly so percent-encoded codes are decoded once.
+		parsed, err := url.Parse(rawURL)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Could not parse URL: %v\n", err)
+			os.Exit(1)
 		}
+		code = parsed.Query().Get("code")
 		if code == "" {
-			fmt.Fprintln(os.Stderr, "Could not extract code from URL")
+			fmt.Fprintln(os.Stderr, "Could not extract code from URL (missing ?code= parameter)")
 			os.Exit(1)
 		}
 	} else {

@@ -111,9 +111,16 @@ func (s *PlaylistsService) GetItems(ctx context.Context, playlistID string) ([]T
 	return ParseRelationship[Track](data, func(t *Track, id string) { t.ID = id })
 }
 
-// AddTracks adds tracks to a playlist.
+// AddTracks adds tracks to a playlist. By default tracks are appended to the
+// end (positionBefore = "-"). Use AddTracksAt for a specific position.
 func (s *PlaylistsService) AddTracks(ctx context.Context, playlistID string, trackIDs []string) error {
-	// Batch in groups of 20 (API limit)
+	return s.AddTracksAt(ctx, playlistID, trackIDs, "-")
+}
+
+// AddTracksAt adds tracks to a playlist before the given position.
+// positionBefore is the item ID to insert before, or "-" to append at the end.
+func (s *PlaylistsService) AddTracksAt(ctx context.Context, playlistID string, trackIDs []string, positionBefore string) error {
+	// Batch in groups of 20 (API limit per spec)
 	const batchSize = 20
 	for i := 0; i < len(trackIDs); i += batchSize {
 		end := i + batchSize
@@ -121,7 +128,14 @@ func (s *PlaylistsService) AddTracks(ctx context.Context, playlistID string, tra
 			end = len(trackIDs)
 		}
 		batch := trackIDs[i:end]
-		payload := ResourcePayload("tracks", batch)
+		data := make([]map[string]string, len(batch))
+		for j, id := range batch {
+			data[j] = map[string]string{"type": "tracks", "id": id}
+		}
+		payload := map[string]any{
+			"data": data,
+			"meta": map[string]string{"positionBefore": positionBefore},
+		}
 		_, err := s.t.postJSON(ctx, fmt.Sprintf("playlists/%s/relationships/items", playlistID), payload)
 		if err != nil {
 			return err
@@ -130,9 +144,33 @@ func (s *PlaylistsService) AddTracks(ctx context.Context, playlistID string, tra
 	return nil
 }
 
-// RemoveTracks removes tracks from a playlist.
-func (s *PlaylistsService) RemoveTracks(ctx context.Context, playlistID string, trackIDs []string) error {
-	payload := ResourcePayload("tracks", trackIDs)
-	_, err := s.t.deleteJSON(ctx, fmt.Sprintf("playlists/%s/relationships/items", playlistID), payload)
-	return err
+// RemoveTracks removes tracks from a playlist by their playlist item IDs.
+//
+// Note: itemIDs are the per-playlist positional item IDs (returned by
+// GetItems via the relationship's resource identifiers), NOT the global
+// track IDs. This is required because the same track may appear multiple
+// times in a playlist and the API needs to know which occurrence to remove.
+func (s *PlaylistsService) RemoveTracks(ctx context.Context, playlistID string, itemIDs []string) error {
+	const batchSize = 20
+	for i := 0; i < len(itemIDs); i += batchSize {
+		end := i + batchSize
+		if end > len(itemIDs) {
+			end = len(itemIDs)
+		}
+		batch := itemIDs[i:end]
+		data := make([]map[string]any, len(batch))
+		for j, id := range batch {
+			data[j] = map[string]any{
+				"type": "tracks",
+				"id":   id,
+				"meta": map[string]string{"itemId": id},
+			}
+		}
+		payload := map[string]any{"data": data}
+		_, err := s.t.deleteJSON(ctx, fmt.Sprintf("playlists/%s/relationships/items", playlistID), payload)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

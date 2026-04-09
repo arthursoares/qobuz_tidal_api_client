@@ -207,20 +207,51 @@ func TestPlaylistsAddTracks(t *testing.T) {
 	if item["type"] != "tracks" || item["id"] != "t1" {
 		t.Errorf("data[0] = %v, want type=tracks id=t1", item)
 	}
+
+	// Verify required meta.positionBefore is present
+	meta, ok := capturedBody["meta"].(map[string]any)
+	if !ok {
+		t.Fatal("meta is missing or not an object")
+	}
+	if pos, _ := meta["positionBefore"].(string); pos != "-" {
+		t.Errorf("meta.positionBefore = %q, want %q (append)", pos, "-")
+	}
+}
+
+func TestPlaylistsAddTracksAt(t *testing.T) {
+	var capturedBody map[string]any
+	server, client := testServerAndClient(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
+		w.WriteHeader(204)
+	})
+	defer server.Close()
+
+	err := client.Playlists.AddTracksAt(context.Background(), "pl-123", []string{"t1"}, "item-99")
+	if err != nil {
+		t.Fatalf("AddTracksAt: %v", err)
+	}
+	meta := capturedBody["meta"].(map[string]any)
+	if meta["positionBefore"] != "item-99" {
+		t.Errorf("positionBefore = %v, want item-99", meta["positionBefore"])
+	}
 }
 
 func TestPlaylistsRemoveTracks(t *testing.T) {
 	var capturedMethod string
 	var capturedPath string
+	var capturedBody map[string]any
 
 	server, client := testServerAndClient(func(w http.ResponseWriter, r *http.Request) {
 		capturedMethod = r.Method
 		capturedPath = r.URL.Path
+		body, _ := io.ReadAll(r.Body)
+		json.Unmarshal(body, &capturedBody)
 		w.WriteHeader(204)
 	})
 	defer server.Close()
 
-	err := client.Playlists.RemoveTracks(context.Background(), "pl-123", []string{"t1"})
+	err := client.Playlists.RemoveTracks(context.Background(), "pl-123", []string{"item-1", "item-2"})
 	if err != nil {
 		t.Fatalf("RemoveTracks: %v", err)
 	}
@@ -230,5 +261,24 @@ func TestPlaylistsRemoveTracks(t *testing.T) {
 	}
 	if capturedPath != "/playlists/pl-123/relationships/items" {
 		t.Errorf("path = %q, want correct path", capturedPath)
+	}
+
+	// Each entry must include meta.itemId per the spec
+	data := capturedBody["data"].([]any)
+	if len(data) != 2 {
+		t.Fatalf("data len = %d, want 2", len(data))
+	}
+	for i, raw := range data {
+		entry := raw.(map[string]any)
+		if entry["type"] != "tracks" {
+			t.Errorf("data[%d].type = %v, want tracks", i, entry["type"])
+		}
+		meta, ok := entry["meta"].(map[string]any)
+		if !ok {
+			t.Fatalf("data[%d].meta is missing", i)
+		}
+		if meta["itemId"] == nil || meta["itemId"] == "" {
+			t.Errorf("data[%d].meta.itemId is missing", i)
+		}
 	}
 }
