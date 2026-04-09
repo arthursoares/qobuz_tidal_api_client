@@ -143,7 +143,19 @@ async def test_search_albums_returns_paginated(
     assert isinstance(result, PaginatedResult)
     assert result.total == 1
     mock_transport.get.assert_awaited_once_with(
-        "search/albums", {"query": "radiohead", "limit": 20}
+        "search/albums", {"query": "radiohead", "limit": 20, "offset": 0}
+    )
+
+
+async def test_search_albums_passes_offset_for_pagination(
+    catalog: CatalogAPI, mock_transport: AsyncMock
+):
+    mock_transport.get.return_value = (200, SAMPLE_SEARCH_RESPONSE)
+
+    await catalog.search_albums("radiohead", limit=20, offset=40)
+
+    mock_transport.get.assert_awaited_once_with(
+        "search/albums", {"query": "radiohead", "limit": 20, "offset": 40}
     )
 
 
@@ -155,7 +167,7 @@ async def test_search_tracks_uses_track_endpoint(
     await catalog.search_tracks("test", limit=10)
 
     mock_transport.get.assert_awaited_once_with(
-        "search/tracks", {"query": "test", "limit": 10}
+        "search/tracks", {"query": "test", "limit": 10, "offset": 0}
     )
 
 
@@ -167,7 +179,7 @@ async def test_search_artists_uses_artist_endpoint(
     await catalog.search_artists("test", limit=10)
 
     mock_transport.get.assert_awaited_once_with(
-        "search/artists", {"query": "test", "limit": 10}
+        "search/artists", {"query": "test", "limit": 10, "offset": 0}
     )
 
 

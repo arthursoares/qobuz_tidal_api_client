@@ -110,10 +110,11 @@ class CatalogAPI:
         query: str,
         *,
         limit: int = 50,
+        offset: int = 0,
     ) -> PaginatedResult:
         """GET search/albums — search albums by query string."""
         _, body = await self._t.get(
-            "search/albums", {"query": query, "limit": limit}
+            "search/albums", {"query": query, "limit": limit, "offset": offset}
         )
         return PaginatedResult.from_dict(body)
 
@@ -122,10 +123,11 @@ class CatalogAPI:
         query: str,
         *,
         limit: int = 50,
+        offset: int = 0,
     ) -> PaginatedResult:
         """GET search/tracks — search tracks by query string."""
         _, body = await self._t.get(
-            "search/tracks", {"query": query, "limit": limit}
+            "search/tracks", {"query": query, "limit": limit, "offset": offset}
         )
         return PaginatedResult.from_dict(body)
 
@@ -134,9 +136,10 @@ class CatalogAPI:
         query: str,
         *,
         limit: int = 50,
+        offset: int = 0,
     ) -> PaginatedResult:
         """GET search/artists — search artists by query string."""
         _, body = await self._t.get(
-            "search/artists", {"query": query, "limit": limit}
+            "search/artists", {"query": query, "limit": limit, "offset": offset}
         )
         return PaginatedResult.from_dict(body)
