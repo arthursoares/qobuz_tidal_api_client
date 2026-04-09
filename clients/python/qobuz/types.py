@@ -6,6 +6,22 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
+def _extract_tracks(value: Any) -> list[dict]:
+    """Pull track items out of an Album/Playlist payload's ``tracks`` field.
+
+    Two response shapes show up in the wild:
+    - ``{"tracks": {"items": [...]}}`` — the standard paginated wrapper
+    - ``{"tracks": [...]}`` — some endpoints inline the list directly
+    Anything else (None, scalar) yields an empty list.
+    """
+    if isinstance(value, dict):
+        items = value.get("items", [])
+        return items if isinstance(items, list) else []
+    if isinstance(value, list):
+        return value
+    return []
+
+
 @dataclass
 class ImageSet:
     small: str | None = None
@@ -169,7 +185,6 @@ class Album:
 
     @classmethod
     def from_dict(cls, d: dict) -> Album:
-        tracks_field = d.get("tracks")
         return cls(
             id=str(d["id"]),
             title=d.get("title", ""),
@@ -192,7 +207,7 @@ class Album:
             genre=Genre.from_dict(d.get("genre")),
             description=d.get("description"),
             awards=[Award.from_dict(a) for a in d.get("awards", [])],
-            tracks=tracks_field.get("items", []) if isinstance(tracks_field, dict) else [],
+            tracks=_extract_tracks(d.get("tracks")),
         )
 
 
@@ -248,7 +263,6 @@ class Playlist:
 
     @classmethod
     def from_dict(cls, d: dict) -> Playlist:
-        tracks_field = d.get("tracks")
         return cls(
             id=d["id"],
             name=d.get("name", ""),
@@ -262,7 +276,7 @@ class Playlist:
             created_at=d.get("created_at", 0),
             updated_at=d.get("updated_at", 0),
             owner=UserSummary.from_dict(d.get("owner", {"id": 0, "name": ""})),
-            tracks=tracks_field.get("items", []) if isinstance(tracks_field, dict) else [],
+            tracks=_extract_tracks(d.get("tracks")),
         )
 
 
