@@ -448,7 +448,8 @@ class AlbumDownloader:
         return os.path.join(album_dir, f"{filename}.{ext}")
 
     async def _download_file(
-        self, manifest: StreamManifest, target_path: str, track_num: int
+        self, manifest: StreamManifest, target_path: str, track_num: int,
+        retries: int = 5,
     ) -> None:
         """Stream the file to disk and decrypt if needed.
 
@@ -456,27 +457,62 @@ class AlbumDownloader:
         first and then decrypted onto ``<target>``. The temp file is
         always cleaned up — even if the download or decrypt raises
         partway through — so partial ``.enc`` files never leak.
-        """
-        session = await self._client._transport.session()
-        chunk_size = 2**17  # 128 KiB
 
+        Retries the underlying HTTP stream up to *retries* times with
+        exponential backoff (2, 4, 8, 16s).  The Tidal CDN occasionally
+        closes connections mid-stream (``ContentLengthError`` /
+        ``ClientPayloadError``); a brief retry almost always succeeds.
+        Decrypt errors are *not* retried (those indicate a bad key, not
+        a network blip).
+        """
+        chunk_size = 2**17  # 128 KiB
         encrypted_path = target_path if not manifest.is_encrypted else target_path + ".enc"
 
         try:
-            async with session.get(manifest.url) as resp:
-                if resp.status >= 400:
-                    raise RuntimeError(
-                        f"download HTTP {resp.status} for track {manifest.track_id}"
-                    )
-                total = int(resp.headers.get("Content-Length") or 0)
-                bytes_done = 0
-                async with aiofiles.open(encrypted_path, "wb") as out:
-                    async for chunk in resp.content.iter_chunked(chunk_size):
-                        await out.write(chunk)
-                        bytes_done += len(chunk)
-                        if self._on_track_progress is not None:
-                            self._on_track_progress(track_num, bytes_done, total)
+            # ── Download with retry ──
+            last_exc: Exception | None = None
+            for attempt in range(retries):
+                try:
+                    session = await self._client._transport.session()
+                    async with session.get(manifest.url) as resp:
+                        if resp.status >= 400:
+                            raise RuntimeError(
+                                f"download HTTP {resp.status} for track {manifest.track_id}"
+                            )
+                        total = int(resp.headers.get("Content-Length") or 0)
+                        bytes_done = 0
+                        async with aiofiles.open(encrypted_path, "wb") as out:
+                            async for chunk in resp.content.iter_chunked(chunk_size):
+                                await out.write(chunk)
+                                bytes_done += len(chunk)
+                                if self._on_track_progress is not None:
+                                    self._on_track_progress(track_num, bytes_done, total)
+                    last_exc = None
+                    break  # success
+                except Exception as e:
+                    last_exc = e
+                    if attempt < retries - 1:
+                        backoff = 2 * (2 ** attempt)  # 2, 4, 8, 16s
+                        logger.warning(
+                            "Tidal download attempt %d/%d failed for track %s, "
+                            "retrying in %ds: %s",
+                            attempt + 1, retries, manifest.track_id, backoff, e,
+                        )
+                        # Drop the partial file before retrying
+                        if os.path.exists(encrypted_path):
+                            try:
+                                os.remove(encrypted_path)
+                            except OSError:
+                                pass
+                        await asyncio.sleep(backoff)
+            if last_exc is not None:
+                logger.error(
+                    "Tidal download failed for track %s after %d attempts: %s",
+                    manifest.track_id, retries, last_exc,
+                )
+                raise last_exc
 
+            # ── Decrypt (no retry — bad key won't fix itself) ──
             if manifest.is_encrypted and manifest.encryption_key:
                 _decrypt_mqa(encrypted_path, target_path, manifest.encryption_key)
         finally:

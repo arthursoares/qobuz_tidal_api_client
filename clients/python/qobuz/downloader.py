@@ -373,9 +373,17 @@ class AlbumDownloader:
                 )
 
     async def _download_file(
-        self, url: str, path: str, track_num: int, retries: int = 2
+        self, url: str, path: str, track_num: int, retries: int = 5
     ) -> None:
-        """Stream download a file from URL to disk with retry on failure."""
+        """Stream download a file from URL to disk with retry on failure.
+
+        Qobuz's CDN occasionally closes connections mid-stream, surfacing
+        as ``aiohttp.ClientPayloadError`` / ``ContentLengthError``.  These
+        are almost always transient — a brief retry succeeds.  Use a small
+        exponential backoff so a flaky moment on the CDN doesn't kill an
+        entire album download.
+        """
+        last_exc: Exception | None = None
         for attempt in range(retries):
             try:
                 async with aiohttp.ClientSession() as session:
@@ -392,13 +400,24 @@ class AlbumDownloader:
                                     self._on_track_progress(track_num, downloaded, total)
                 return  # Success
             except Exception as e:
+                last_exc = e
                 if attempt < retries - 1:
-                    logger.warning("Download attempt %d failed, retrying in 2s: %s", attempt + 1, e)
+                    backoff = 2 * (2 ** attempt)  # 2, 4, 8, 16 seconds
+                    logger.warning(
+                        "Download attempt %d/%d failed, retrying in %ds: %s",
+                        attempt + 1, retries, backoff, e,
+                    )
                     if os.path.exists(path):
                         os.remove(path)
-                    await asyncio.sleep(2)  # Brief pause before retry
+                    await asyncio.sleep(backoff)
                 else:
+                    logger.error(
+                        "Download failed after %d attempts: %s", retries, e
+                    )
                     raise
+        # Unreachable, but keeps type checkers happy
+        if last_exc is not None:
+            raise last_exc
 
     async def _download_booklets(self, goodies: list[dict], folder: str) -> list[str]:
         """Download PDF booklets from the goodies list."""
