@@ -17,7 +17,12 @@ _SEED_TZ_RE = (
     r'[a-z]\.initialSeed\("(?P<seed>[\w=]+)",window\.ut'
     r"imezone\.(?P<timezone>[a-z]+)\)"
 )
-_APP_ID_RE = r'production:{api:{appId:"(?P<app_id>\d{9})",appSecret:"(\w{32})'
+# Captures both the production app_id AND the literal appSecret field.
+# As of bundle 8.1.0-b019, the bundle's signing function actually uses
+# `window.rng.prototype.initialization()` (the seed-based path) rather
+# than this literal — but we keep the literal as a fallback in case
+# Qobuz removes one path or the other.
+_APP_ID_RE = r'production:{api:{appId:"(?P<app_id>\d{9})",appSecret:"(?P<app_secret>\w{32})'
 _BUNDLE_RE = r'<script src="(/resources/\d+\.\d+\.\d+-[a-z]\d{3}/bundle\.js)"></script>'
 _INFO_EXTRAS_TEMPLATE = (
     r'name:"\w+/(?P<timezone>{timezones})",info:"'
@@ -47,11 +52,13 @@ async def fetch_app_credentials() -> tuple[str, list[str]]:
         async with session.get(bundle_url) as resp:
             bundle = await resp.text()
 
-    # Extract app_id
+    # Extract app_id and the literal appSecret field (used as a fallback
+    # if the seed-based decoding produces nothing)
     app_id_match = re.search(_APP_ID_RE, bundle)
     if app_id_match is None:
         raise RuntimeError("Could not find app_id in bundle")
     app_id = app_id_match.group("app_id")
+    literal_app_secret = app_id_match.group("app_secret")
 
     # Extract seed/timezone pairs
     seed_matches = re.finditer(_SEED_TZ_RE, bundle)
@@ -83,6 +90,14 @@ async def fetch_app_credentials() -> tuple[str, list[str]]:
                 decoded.append(secret)
         except Exception:
             pass
+
+    # Belt-and-suspenders fallback: append the literal appSecret field
+    # from the bundle config if it's not already in the seed-decoded list.
+    # As of bundle 8.1.0-b019 the runtime signing function uses the seed
+    # path, but if Qobuz removes one path or the other, find_working_secret
+    # will still have a candidate to test.
+    if literal_app_secret and literal_app_secret not in decoded:
+        decoded.append(literal_app_secret)
 
     if not decoded:
         raise RuntimeError("No app secrets found in bundle")
