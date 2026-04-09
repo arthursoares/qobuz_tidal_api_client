@@ -139,7 +139,7 @@ class Award:
 
     @classmethod
     def from_dict(cls, d: dict) -> Award:
-        return cls(id=d["id"], name=d.get("name", ""), awarded_at=d.get("awarded_at"))
+        return cls(id=d.get("id", 0), name=d.get("name", ""), awarded_at=d.get("awarded_at"))
 
 
 @dataclass
@@ -165,9 +165,11 @@ class Album:
     genre: Genre | None = None
     description: str | None = None
     awards: list[Award] = field(default_factory=list)
+    tracks: list[dict] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, d: dict) -> Album:
+        tracks_field = d.get("tracks")
         return cls(
             id=str(d["id"]),
             title=d.get("title", ""),
@@ -190,6 +192,7 @@ class Album:
             genre=Genre.from_dict(d.get("genre")),
             description=d.get("description"),
             awards=[Award.from_dict(a) for a in d.get("awards", [])],
+            tracks=tracks_field.get("items", []) if isinstance(tracks_field, dict) else [],
         )
 
 
@@ -245,6 +248,7 @@ class Playlist:
 
     @classmethod
     def from_dict(cls, d: dict) -> Playlist:
+        tracks_field = d.get("tracks")
         return cls(
             id=d["id"],
             name=d.get("name", ""),
@@ -258,7 +262,7 @@ class Playlist:
             created_at=d.get("created_at", 0),
             updated_at=d.get("updated_at", 0),
             owner=UserSummary.from_dict(d.get("owner", {"id": 0, "name": ""})),
-            tracks=d.get("tracks", {}).get("items", []),
+            tracks=tracks_field.get("items", []) if isinstance(tracks_field, dict) else [],
         )
 
 
@@ -310,13 +314,10 @@ class FileUrl:
     track_id: int
     format_id: int
     mime_type: str
-    sampling_rate: int
-    bits_depth: int
+    sampling_rate: float
+    bit_depth: int
     duration: float
-    url_template: str
-    n_segments: int
-    key_id: str | None = None
-    key: str | None = None
+    url: str
     blob: str | None = None
     restrictions: list[dict] = field(default_factory=list)
 
@@ -327,12 +328,9 @@ class FileUrl:
             format_id=d["format_id"],
             mime_type=d.get("mime_type", ""),
             sampling_rate=d.get("sampling_rate", 0),
-            bits_depth=d.get("bits_depth", 0),
+            bit_depth=d.get("bit_depth", 0),
             duration=d.get("duration", 0),
-            url_template=d.get("url_template", ""),
-            n_segments=d.get("n_segments", 0),
-            key_id=d.get("key_id"),
-            key=d.get("key"),
+            url=d.get("url", ""),
             blob=d.get("blob"),
             restrictions=d.get("restrictions", []),
         )

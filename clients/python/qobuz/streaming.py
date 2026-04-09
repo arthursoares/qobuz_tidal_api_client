@@ -13,19 +13,18 @@ QUALITY_MAP = {1: 5, 2: 6, 3: 7, 4: 27}
 
 
 def _compute_signature(
-    endpoint: str,
     track_id: str,
     format_id: str,
     intent: str,
     timestamp: str,
     app_secret: str,
 ) -> str:
-    """Compute the MD5 request signature for file URL endpoints.
+    """Compute the MD5 request signature for track/getFileUrl.
 
-    The raw string is:
-        ``{endpoint}format_id{format_id}intent{intent}track_id{track_id}{timestamp}{app_secret}``
+    The raw string matches the Qobuz API's expected format:
+        ``trackgetFileUrlformat_id{format_id}intent{intent}track_id{track_id}{timestamp}{app_secret}``
     """
-    raw = f"{endpoint}format_id{format_id}intent{intent}track_id{track_id}{timestamp}{app_secret}"
+    raw = f"trackgetFileUrlformat_id{format_id}intent{intent}track_id{track_id}{timestamp}{app_secret}"
     return hashlib.md5(raw.encode()).hexdigest()
 
 
@@ -67,13 +66,12 @@ class StreamingAPI:
             raise ValueError("app_secret is required for get_file_url")
 
         format_id = QUALITY_MAP.get(quality, 7)
-        timestamp = str(int(time.time()))
+        unix_ts = time.time()
         sig = _compute_signature(
-            endpoint="fileUrl",
             track_id=str(track_id),
             format_id=str(format_id),
             intent=intent,
-            timestamp=timestamp,
+            timestamp=str(unix_ts),
             app_secret=self._app_secret,
         )
 
@@ -81,11 +79,11 @@ class StreamingAPI:
             "track_id": track_id,
             "format_id": format_id,
             "intent": intent,
-            "request_ts": timestamp,
+            "request_ts": unix_ts,
             "request_sig": sig,
         }
 
-        _status, body = await self._transport.get("file/url", params)
+        _status, body = await self._transport.get("track/getFileUrl", params)
         return FileUrl.from_dict(body)
 
     # -- Session (signed) ----------------------------------------------------
@@ -112,7 +110,6 @@ class StreamingAPI:
         ).hexdigest()
 
         data: dict[str, Any] = {
-            "profile": "qbz-1",
             "request_ts": timestamp,
             "request_sig": sig,
         }
@@ -132,10 +129,17 @@ class StreamingAPI:
 
         Sends a POST to ``track/reportStreamingStart`` with form-encoded data
         containing a JSON-serialized events array.
+
+        Args:
+            track_id: Qobuz track ID.
+            format_id: Audio format ID.
+            user_id: Current user ID.
+
+        Returns:
+            Raw API response dict.
         """
         event = {
             "track_id": track_id,
-            "date": int(time.time()),
             "format_id": format_id,
             "user_id": user_id,
         }
@@ -149,15 +153,16 @@ class StreamingAPI:
     async def report_end(self, events: list[dict]) -> dict:
         """Report the end of track playback.
 
-        Sends a POST to ``track/reportStreamingEndJson`` with a JSON body
-        including renderer_context.
+        Sends a POST to ``track/reportStreamingEndJson`` with a JSON body.
+
+        Args:
+            events: List of playback event dicts.
+
+        Returns:
+            Raw API response dict.
         """
         _status, body = await self._transport.post_json(
-            "track/reportStreamingEndJson",
-            {
-                "events": events,
-                "renderer_context": {"software_version": "qobuz-sdk-0.1.0"},
-            },
+            "track/reportStreamingEndJson", {"events": events}
         )
         return body
 
@@ -168,29 +173,32 @@ class StreamingAPI:
     ) -> dict:
         """Report track playback context.
 
-        Sends a POST to ``event/reportTrackContext`` with the version
-        and events array wrapper required by the API.
+        Sends a POST to ``event/reportTrackContext`` with a JSON body.
+
+        Args:
+            track_context_uuid: UUID for the track context.
+            data: Context data dict (e.g., source, album_id).
+
+        Returns:
+            Raw API response dict.
         """
         _status, body = await self._transport.post_json(
             "event/reportTrackContext",
-            {
-                "version": "01.00",
-                "events": [
-                    {"track_context_uuid": track_context_uuid, "data": data},
-                ],
-            },
+            {"track_context_uuid": track_context_uuid, "data": data},
         )
         return body
 
     async def dynamic_suggest(
         self,
-        listened_tracks_ids: list[int],
+        listened_track_ids: list[int],
         limit: int = 50,
     ) -> dict:
         """Get dynamic track suggestions based on listening history.
 
+        Sends a POST to ``dynamic/suggest`` with a JSON body.
+
         Args:
-            listened_tracks_ids: List of recently listened track IDs.
+            listened_track_ids: List of recently listened track IDs.
             limit: Maximum number of suggestions (default 50).
 
         Returns:
@@ -198,6 +206,6 @@ class StreamingAPI:
         """
         _status, body = await self._transport.post_json(
             "dynamic/suggest",
-            {"listened_tracks_ids": listened_tracks_ids, "limit": limit},
+            {"listened_track_ids": listened_track_ids, "limit": limit},
         )
         return body
