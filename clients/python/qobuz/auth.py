@@ -11,7 +11,17 @@ from urllib.parse import urlparse, parse_qs
 import aiohttp
 
 APP_ID = "304027809"
-PRIVATE_KEY = "6lz8C03UDIC7"
+PRIVATE_KEY = "6lz8C03UDIC7"  # OAuth code-exchange key, NOT the signing secret
+
+# Production signing secret for app 304027809.  Decoded from the Qobuz
+# desktop Helper's bundle (paris seed in `initialSeed("OTZj...", paris)`).
+# Verified by recomputing a captured `user/tracking?request_sig=...` MD5
+# against this secret — the bundle's `c.initialization()` returns this
+# value at runtime, then the request signing function does
+#     MD5(object + method + sorted_params + ts + initialization_result)
+# which the Helper sends as `request_sig`.
+APP_SECRET = "96c4538ca81015a5be0c1d5bd9573844"
+
 BASE_URL = "https://www.qobuz.com/api.json/0.2"
 CONFIG_DIR = Path.home() / ".config" / "qobuz"
 CREDENTIALS_FILE = CONFIG_DIR / "credentials.json"
