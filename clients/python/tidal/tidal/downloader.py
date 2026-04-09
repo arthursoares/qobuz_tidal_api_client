@@ -116,6 +116,40 @@ def _build_albumartist(album: Album) -> str:
     return album.artist.name or "Unknown"
 
 
+def _tidal_quality_fields(
+    album_audio_quality: str | None,
+    config_quality: int,
+) -> tuple[str, int, str]:
+    """Return ``(container, bit_depth, sampling_rate)`` for folder formatting.
+
+    Tidal reports an ``audioQuality`` enum on albums which maps cleanly onto
+    file format metadata:
+
+    - ``LOW``      — AAC ~96 kbps, 16-bit, 44.1 kHz
+    - ``HIGH``     — AAC ~320 kbps, 16-bit, 44.1 kHz
+    - ``LOSSLESS`` — FLAC 16-bit, 44.1 kHz (CD quality)
+    - ``HI_RES``   — FLAC 24-bit, 44.1 kHz (MQA folded into a 44.1 kHz container)
+
+    When the album-level quality is missing we fall back to the configured
+    download quality tier so the folder label still reflects the *intended*
+    download, not a made-up default.
+    """
+    quality = (album_audio_quality or "").upper()
+    if not quality:
+        quality = {0: "LOW", 1: "HIGH", 2: "LOSSLESS", 3: "HI_RES"}.get(
+            config_quality, "LOSSLESS"
+        )
+
+    if quality in ("LOW", "HIGH"):
+        return "AAC", 16, "44.1"
+    if quality == "LOSSLESS":
+        return "FLAC", 16, "44.1"
+    if quality == "HI_RES":
+        return "FLAC", 24, "44.1"
+    # Unknown enum — assume CD quality FLAC rather than lying about HiRes.
+    return "FLAC", 16, "44.1"
+
+
 def _decrypt_mqa(input_path: str, output_path: str, encryption_key_b64: str) -> None:
     """Decrypt a Tidal MQA / HI_RES file in place.
 
@@ -194,16 +228,60 @@ class AlbumDownloader:
         cover_path = await self._download_cover(album, album_dir)
 
         sem = asyncio.Semaphore(self._config.max_connections)
-        results: list[TrackResult] = []
 
         async def _wrapped(track: Track) -> TrackResult:
             async with sem:
-                return await self._download_one_track(
-                    track, album, album_dir, cover_path
-                )
+                try:
+                    return await self._download_one_track(
+                        track, album, album_dir, cover_path
+                    )
+                except Exception as exc:
+                    # Catches anything _download_one_track didn't handle
+                    # itself (most notably user-supplied callback exceptions
+                    # that fire outside the per-track try/except). One bad
+                    # track must never cancel siblings.
+                    logger.exception(
+                        "Unhandled error downloading track %s", track.id
+                    )
+                    if self._on_track_complete is not None:
+                        try:
+                            self._on_track_complete(
+                                track.track_number or 0, track.title, False
+                            )
+                        except Exception:
+                            logger.exception(
+                                "on_track_complete callback raised for track %s",
+                                track.id,
+                            )
+                    return TrackResult(
+                        track_id=track.id,
+                        title=track.title,
+                        success=False,
+                        error=str(exc),
+                    )
 
-        for tr in await asyncio.gather(*(_wrapped(t) for t in tracks)):
-            results.append(tr)
+        raw_results = await asyncio.gather(
+            *(_wrapped(t) for t in tracks), return_exceptions=True
+        )
+        results: list[TrackResult] = []
+        for idx, tr in enumerate(raw_results):
+            if isinstance(tr, BaseException):
+                # Defensive — the inner try/except should have converted
+                # every real failure into a TrackResult already.
+                track = tracks[idx]
+                logger.exception(
+                    "Track %s failed with unwrapped exception: %s", track.id, tr
+                )
+                results.append(
+                    TrackResult(
+                        track_id=track.id,
+                        title=track.title,
+                        success=False,
+                        error=str(tr),
+                    )
+                )
+            else:
+                results.append(tr)
 
         successful = sum(1 for r in results if r.success)
         return AlbumResult(
@@ -239,13 +317,16 @@ class AlbumDownloader:
 
     def _album_format_info(self, album: Album) -> dict[str, Any]:
         year = (album.release_date or "")[:4] or "0000"
+        container, bit_depth, sampling_rate = _tidal_quality_fields(
+            album.audio_quality, self._config.quality
+        )
         return {
             "albumartist": _safe_value(_build_albumartist(album)),
             "title": _safe_value(album.title),
             "year": year,
-            "container": "FLAC",
-            "bit_depth": 16 if album.audio_quality == "LOSSLESS" else 24,
-            "sampling_rate": "44.1" if album.audio_quality == "LOSSLESS" else "96",
+            "container": container,
+            "bit_depth": bit_depth,
+            "sampling_rate": sampling_rate,
             "id": album.id,
             "albumcomposer": _safe_value(_build_albumartist(album)),
         }
@@ -333,11 +414,14 @@ class AlbumDownloader:
                 self._tag_file(target, track, album, cover_path, manifest)
         except Exception as exc:
             logger.exception("Download failed for track %s", track.id)
-            if os.path.exists(target):
-                try:
-                    os.remove(target)
-                except OSError:
-                    pass
+            # Clean up both the final target and the ``.enc`` temp (if any)
+            # so a failed download never leaves half-written files behind.
+            for leftover in (target, target + ".enc"):
+                if os.path.exists(leftover):
+                    try:
+                        os.remove(leftover)
+                    except OSError:
+                        pass
             if self._on_track_complete is not None:
                 self._on_track_complete(track_num, title, False)
             return TrackResult(
@@ -355,45 +439,58 @@ class AlbumDownloader:
     ) -> str:
         filename = self._build_track_filename(track, album)
         ext = manifest.file_extension
-        # Optional disc subdir for multi-disc albums
+        # Multi-disc albums get a per-disc subdirectory. Uses ``Disc N`` to
+        # match streamrip's historical layout so upgrades from streamrip to
+        # this SDK don't re-download an already-organized library.
         if self._config.disc_subdirectories and album.number_of_volumes > 1:
-            disc_dir = os.path.join(album_dir, f"CD{track.volume_number:02d}")
+            disc_dir = os.path.join(album_dir, f"Disc {track.volume_number}")
             return os.path.join(disc_dir, f"{filename}.{ext}")
         return os.path.join(album_dir, f"{filename}.{ext}")
 
     async def _download_file(
         self, manifest: StreamManifest, target_path: str, track_num: int
     ) -> None:
-        """Stream the file to disk and decrypt if needed."""
+        """Stream the file to disk and decrypt if needed.
+
+        Encrypted (MQA / HiRes) tracks are streamed to ``<target>.enc``
+        first and then decrypted onto ``<target>``. The temp file is
+        always cleaned up — even if the download or decrypt raises
+        partway through — so partial ``.enc`` files never leak.
+        """
         session = await self._client._transport.session()
         chunk_size = 2**17  # 128 KiB
 
-        # If encrypted, write to a temp path first then decrypt over the top.
         encrypted_path = target_path if not manifest.is_encrypted else target_path + ".enc"
 
-        async with session.get(manifest.url) as resp:
-            if resp.status >= 400:
-                raise RuntimeError(
-                    f"download HTTP {resp.status} for track {manifest.track_id}"
-                )
-            total = int(resp.headers.get("Content-Length") or 0)
-            bytes_done = 0
-            async with aiofiles.open(encrypted_path, "wb") as out:
-                async for chunk in resp.content.iter_chunked(chunk_size):
-                    await out.write(chunk)
-                    bytes_done += len(chunk)
-                    if self._on_track_progress is not None:
-                        self._on_track_progress(track_num, bytes_done, total)
+        try:
+            async with session.get(manifest.url) as resp:
+                if resp.status >= 400:
+                    raise RuntimeError(
+                        f"download HTTP {resp.status} for track {manifest.track_id}"
+                    )
+                total = int(resp.headers.get("Content-Length") or 0)
+                bytes_done = 0
+                async with aiofiles.open(encrypted_path, "wb") as out:
+                    async for chunk in resp.content.iter_chunked(chunk_size):
+                        await out.write(chunk)
+                        bytes_done += len(chunk)
+                        if self._on_track_progress is not None:
+                            self._on_track_progress(track_num, bytes_done, total)
 
-        if manifest.is_encrypted and manifest.encryption_key:
-            try:
+            if manifest.is_encrypted and manifest.encryption_key:
                 _decrypt_mqa(encrypted_path, target_path, manifest.encryption_key)
-            finally:
-                if encrypted_path != target_path and os.path.exists(encrypted_path):
-                    try:
-                        os.remove(encrypted_path)
-                    except OSError:
-                        pass
+        finally:
+            # Remove the temp file on every path — success (after decrypt),
+            # failed decrypt, or failed download.
+            if (
+                manifest.is_encrypted
+                and encrypted_path != target_path
+                and os.path.exists(encrypted_path)
+            ):
+                try:
+                    os.remove(encrypted_path)
+                except OSError:
+                    pass
 
     # -- Tagging -------------------------------------------------------------
 

@@ -100,7 +100,7 @@ class TestTrack:
         assert track.artist.name == "Test Artist"
         assert track.album is not None
         assert track.album.id == 12345
-        assert track.copy_right == "(C) 2024 Test Label"
+        assert track.copyright == "(C) 2024 Test Label"
 
     def test_album_can_be_none(self):
         payload = {**SAMPLE_TRACK}
