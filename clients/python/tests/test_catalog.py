@@ -45,6 +45,39 @@ async def test_get_album_custom_extra(catalog: CatalogAPI, mock_transport: Async
     )
 
 
+async def test_get_album_with_tracks_returns_album_and_tracks(
+    catalog: CatalogAPI, mock_transport: AsyncMock
+):
+    payload = {
+        **SAMPLE_ALBUM,
+        "tracks": {"items": [SAMPLE_TRACK, SAMPLE_TRACK]},
+    }
+    mock_transport.get.return_value = (200, payload)
+
+    album, tracks = await catalog.get_album_with_tracks("p0d55tt7gv3lc")
+
+    assert isinstance(album, Album)
+    assert album.id == "p0d55tt7gv3lc"
+    assert len(tracks) == 2
+    assert all(isinstance(t, Track) for t in tracks)
+    mock_transport.get.assert_awaited_once_with(
+        "album/get",
+        {"album_id": "p0d55tt7gv3lc", "extra": "track_ids"},
+    )
+
+
+async def test_get_album_with_tracks_handles_missing_tracks(
+    catalog: CatalogAPI, mock_transport: AsyncMock
+):
+    """If the response has no tracks key, the tracks list is empty."""
+    mock_transport.get.return_value = (200, SAMPLE_ALBUM)
+
+    album, tracks = await catalog.get_album_with_tracks("p0d55tt7gv3lc")
+
+    assert isinstance(album, Album)
+    assert tracks == []
+
+
 async def test_search_albums_returns_paginated_result(
     catalog: CatalogAPI, mock_transport: AsyncMock
 ):
