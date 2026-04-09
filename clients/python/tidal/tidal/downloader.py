@@ -220,11 +220,6 @@ class AlbumDownloader:
         album_dir = self._build_album_folder(album)
         os.makedirs(album_dir, exist_ok=True)
 
-        # Optional: write metadata sentinel for filesystem-based dedup
-        metadata_path = os.path.join(album_dir, ".tidal.json")
-        if self._config.write_metadata_file:
-            self._write_metadata_file(metadata_path, album)
-
         cover_path = await self._download_cover(album, album_dir)
 
         sem = asyncio.Semaphore(self._config.max_connections)
@@ -284,7 +279,7 @@ class AlbumDownloader:
                 results.append(tr)
 
         successful = sum(1 for r in results if r.success)
-        return AlbumResult(
+        album_result = AlbumResult(
             album_id=album.id,
             title=album.title,
             artist=album.artist.name,
@@ -292,6 +287,16 @@ class AlbumDownloader:
             successful=successful,
             tracks=results,
         )
+
+        # Write metadata sentinel for filesystem-based dedup + scan
+        # reconciliation, only if at least one track succeeded.  Same
+        # filename and key shape as the Qobuz SDK so a single scanner
+        # picks up albums from either source.
+        if self._config.write_metadata_file and successful > 0:
+            metadata_path = os.path.join(album_dir, self.METADATA_FILENAME)
+            self._write_metadata_file(metadata_path, album, album_result)
+
+        return album_result
 
     # -- Filesystem layout ---------------------------------------------------
 
@@ -600,17 +605,47 @@ class AlbumDownloader:
 
     # -- Metadata sentinel --------------------------------------------------
 
-    def _write_metadata_file(self, path: str, album: Album) -> None:
+    METADATA_FILENAME = ".streamrip.json"
+    """Sentinel filename written next to the audio files for filesystem-based
+    dedup and scan reconciliation. Same name as the Qobuz SDK so a single
+    scanner (e.g. ``qobuz.downloader.AlbumDownloader.scan_downloaded_albums``)
+    can pick up albums from either source — they're disambiguated by the
+    ``source`` field in the payload."""
+
+    def _write_metadata_file(
+        self,
+        path: str,
+        album: Album,
+        result: AlbumResult | None = None,
+    ) -> None:
         try:
-            payload = {
+            payload: dict[str, Any] = {
                 "source": "tidal",
                 "album_id": album.id,
                 "title": album.title,
                 "artist": album.artist.name,
                 "release_date": album.release_date,
+                # Match the Qobuz SDK key name so the shared scanner picks
+                # this up.  ``number_of_tracks`` kept as a Tidal-specific
+                # alias for backwards compatibility.
+                "tracks_count": album.number_of_tracks,
                 "number_of_tracks": album.number_of_tracks,
+                "quality": self._config.quality,
                 "downloaded_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             }
+            if result is not None:
+                payload["tracks_downloaded"] = result.successful
+                payload["tracks"] = [
+                    {
+                        "id": t.track_id,
+                        "title": t.title,
+                        "success": t.success,
+                        "path": (
+                            os.path.basename(t.file_path) if t.file_path else None
+                        ),
+                    }
+                    for t in result.tracks
+                ]
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(payload, f, ensure_ascii=False, indent=2)
         except OSError as exc:
