@@ -8,17 +8,22 @@ of the public openapi.tidal.com/v2 API used by the Go Tidal client.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 import aiohttp
 from aiolimiter import AsyncLimiter
 
-from .errors import raise_for_status
+from .errors import AuthenticationError, raise_for_status
 
 BASE_URL = "https://api.tidalhifi.com/v1"
 LISTEN_URL = "https://listen.tidal.com/v1"
 
 _USER_AGENT = "tidal-python-sdk/0.1.0"
+
+
+# Coroutine that returns True when a token refresh succeeded and the request
+# should be retried with the new token. Installed by TidalClient.
+TokenRefreshCallback = Callable[[], Awaitable[bool]]
 
 
 class HttpTransport:
@@ -39,6 +44,17 @@ class HttpTransport:
         self._country_code = country_code
         self._limiter = AsyncLimiter(requests_per_minute, 60)
         self._session: aiohttp.ClientSession | None = None
+        self._refresh_callback: TokenRefreshCallback | None = None
+        self._refresh_lock: Any = None  # asyncio.Lock, lazy-init
+
+    def set_refresh_callback(self, callback: TokenRefreshCallback | None) -> None:
+        """Install a callback used to refresh the access token on 401.
+
+        The callback should update this transport's token (via
+        :meth:`set_access_token`) and return True if the request should be
+        retried, or False/raise if the refresh failed.
+        """
+        self._refresh_callback = callback
 
     # -- Token management ----------------------------------------------------
 
@@ -77,15 +93,13 @@ class HttpTransport:
             merged.update(params)
         return merged
 
-    async def _do(
+    async def _send_once(
         self,
         method: str,
         url: str,
-        *,
-        params: dict[str, Any] | None = None,
-        data: dict[str, Any] | None = None,
-        json_body: dict[str, Any] | None = None,
-        raise_errors: bool = True,
+        params: dict[str, Any] | None,
+        data: dict[str, Any] | None,
+        json_body: dict[str, Any] | None,
     ) -> tuple[int, dict]:
         if self._session is None:
             raise RuntimeError("HttpTransport must be used as an async context manager")
@@ -107,6 +121,38 @@ class HttpTransport:
                     body = await resp.json(content_type=None)
                 except (aiohttp.ContentTypeError, ValueError):
                     body = {}
+
+        return status, body if isinstance(body, dict) else {}
+
+    async def _do(
+        self,
+        method: str,
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        data: dict[str, Any] | None = None,
+        json_body: dict[str, Any] | None = None,
+        raise_errors: bool = True,
+    ) -> tuple[int, dict]:
+        status, body = await self._send_once(method, url, params, data, json_body)
+
+        # 401 → try a one-shot token refresh and retry. This mirrors
+        # streamrip.client.tidal._api_request's auto-refresh behavior so
+        # callers don't have to manually call ensure_token before every call.
+        if status == 401 and self._refresh_callback is not None:
+            import asyncio
+
+            if self._refresh_lock is None:
+                self._refresh_lock = asyncio.Lock()
+            async with self._refresh_lock:
+                try:
+                    refreshed = await self._refresh_callback()
+                except Exception:
+                    refreshed = False
+            if refreshed:
+                status, body = await self._send_once(
+                    method, url, params, data, json_body
+                )
 
         if raise_errors:
             raise_for_status(status, body if isinstance(body, dict) else None)

@@ -99,7 +99,7 @@ class Track:
     explicit: bool = False
     isrc: str | None = None
     audio_quality: str | None = None
-    copy_right: str | None = None  # `copyright` reserved-ish
+    copyright: str | None = None
     url: str | None = None
 
     @classmethod
@@ -117,7 +117,7 @@ class Track:
             explicit=d.get("explicit", False),
             isrc=d.get("isrc"),
             audio_quality=d.get("audioQuality"),
-            copy_right=d.get("copyright"),
+            copyright=d.get("copyright"),
             url=d.get("url"),
         )
 
