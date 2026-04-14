@@ -357,3 +357,11 @@ qobuz_api_client/
 ## Consumers
 
 - [`arthursoares/streamrip`](https://github.com/arthursoares/streamrip) — a FastAPI + SvelteKit web UI that uses both Python packages as a git submodule. Sources of truth for how these SDKs are wired into a real app: the backend's `services/library.py`, `services/download.py`, and `main.py`.
+
+## Disclaimer
+
+These are **unofficial** clients, reverse-engineered from the behavior of Qobuz's and Tidal's own applications. They are intended for personal use with your own legitimately-purchased streaming subscriptions, and you are responsible for complying with the terms of service of Qobuz and Tidal. The authors take no responsibility for how you use these libraries.
+
+## License
+
+GPL-3.0-only. This code was extracted and refactored from [`nathom/streamrip`](https://github.com/nathom/streamrip) (GPL-3.0) — see the streamrip repo for the original Qobuz/Tidal client logic, tagging helpers, and MQA decryption primitives that seed this project.
