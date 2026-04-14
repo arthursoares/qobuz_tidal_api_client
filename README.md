@@ -356,7 +356,7 @@ qobuz_api_client/
 
 ## Consumers
 
-- [`arthursoares/streamrip`](https://github.com/arthursoares/streamrip) — a FastAPI + SvelteKit web UI that uses both Python packages as a git submodule. Sources of truth for how these SDKs are wired into a real app: the backend's `services/library.py`, `services/download.py`, and `main.py`.
+- [`arthursoares/libsync`](https://github.com/arthursoares/libsync) — a FastAPI + SvelteKit web UI for managing Qobuz/Tidal libraries (formerly `arthursoares/streamrip`). Uses both Python packages as a git submodule. Source of truth for how these SDKs wire into a real app — see the backend's `services/library.py`, `services/download.py`, and `main.py`.
 
 ## Disclaimer
 
