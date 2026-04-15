@@ -1,5 +1,8 @@
 # Qobuz & Tidal API Clients
 
+[![Tests](https://github.com/arthursoares/qobuz_tidal_api_client/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/arthursoares/qobuz_tidal_api_client/actions/workflows/tests.yml)
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
+
 Unofficial clients for the Qobuz and Tidal music APIs — Go and Python libraries with a matching facade-shape (`client.catalog`, `client.favorites`, `client.playlists`, `client.streaming`), a CLI binary for Qobuz, and end-to-end album downloaders that handle tagging, retries, dedup, and MQA decryption.
 
 API surfaces validated from real Proxyman captures of the official clients.

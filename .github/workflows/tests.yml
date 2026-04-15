@@ -1,0 +1,51 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+jobs:
+  qobuz-python:
+    name: qobuz (python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install qobuz package
+        run: |
+          cd clients/python
+          pip install -e ".[dev]"
+
+      - name: Run pytest
+        run: |
+          cd clients/python
+          pytest tests/ -v --tb=short
+
+  tidal-python:
+    name: tidal (python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install tidal package
+        run: |
+          cd clients/python/tidal
+          pip install -e ".[dev]"
+
+      - name: Run pytest
+        run: |
+          cd clients/python/tidal
+          pytest tests/ -v --tb=short
