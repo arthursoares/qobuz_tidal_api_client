@@ -1,0 +1,48 @@
+version: 2
+
+updates:
+  # Qobuz Python package
+  - package-ecosystem: pip
+    directory: /clients/python
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: chore
+      include: scope
+    labels: [dependencies, python, qobuz]
+
+  # Tidal Python package
+  - package-ecosystem: pip
+    directory: /clients/python/tidal
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: chore
+      include: scope
+    labels: [dependencies, python, tidal]
+
+  # Go modules
+  - package-ecosystem: gomod
+    directory: /clients/go
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: chore
+      include: scope
+    labels: [dependencies, go]
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: ci
+    labels: [dependencies, github-actions]
