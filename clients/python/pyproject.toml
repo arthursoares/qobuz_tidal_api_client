@@ -6,7 +6,7 @@ requires-python = ">=3.10"
 dependencies = [
     "aiohttp>=3.9",
     "aiolimiter>=1.1",
-    "mutagen>=1.45",
+    "mutagen>=1.47.0",
 ]
 
 [project.optional-dependencies]
