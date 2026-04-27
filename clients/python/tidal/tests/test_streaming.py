@@ -2,10 +2,9 @@
 
 import base64
 import json
-
-import pytest
 from unittest.mock import AsyncMock
 
+import pytest
 from tidal.errors import NonStreamableError
 from tidal.streaming import StreamingAPI
 from tidal.types import StreamManifest
@@ -185,5 +184,6 @@ async def test_clamps_invalid_quality_above_range(
     )
 
     result = await streaming.get_manifest(67890, quality=99)
-    # Clamped to 3 (HI_RES)
-    assert result.audio_quality == "HI_RES"
+    # Clamped to 4 (HI_RES_LOSSLESS) — the highest tier in QUALITY_MAP.
+    # When tier 4 was added the clamp was bumped from 3 to 4 to match.
+    assert result.audio_quality == "HI_RES_LOSSLESS"
