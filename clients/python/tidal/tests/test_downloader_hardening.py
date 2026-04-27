@@ -8,12 +8,10 @@ Covers the risky paths that were previously unguarded:
 - client auto-refresh on ``__aenter__`` and 401 retry hook wiring
 """
 
-import asyncio
 import os
-
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from tidal.downloader import (
     AlbumDownloader,
     DownloadConfig,
@@ -21,7 +19,6 @@ from tidal.downloader import (
     _tidal_quality_fields,
 )
 from tidal.types import Album, ArtistSummary, StreamManifest, Track
-
 
 # ---------------------------------------------------------------------------
 # Folder quality metadata
@@ -32,9 +29,15 @@ class TestTidalQualityFields:
     def test_lossless_is_cd_quality_flac(self):
         assert _tidal_quality_fields("LOSSLESS", 3) == ("FLAC", 16, "44.1")
 
-    def test_hi_res_is_24_44_1_flac(self):
-        # Tidal MQA / HiRes lives in a 44.1 kHz container, not 96 kHz.
-        assert _tidal_quality_fields("HI_RES", 3) == ("FLAC", 24, "44.1")
+    def test_hi_res_is_cd_quality_flac(self):
+        # Tidal HI_RES is the legacy MQA tier — physically a 16/44.1 FLAC
+        # carrying MQA-encoded subbands, not true 24-bit. The folder label
+        # has to reflect the actual container, not the claimed depth.
+        assert _tidal_quality_fields("HI_RES", 3) == ("FLAC", 16, "44.1")
+
+    def test_hi_res_lossless_is_24_192_flac(self):
+        # The 2024+ HI_RES_LOSSLESS tier is the real 24-bit one.
+        assert _tidal_quality_fields("HI_RES_LOSSLESS", 4) == ("FLAC", 24, "192")
 
     def test_high_is_aac(self):
         assert _tidal_quality_fields("HIGH", 1) == ("AAC", 16, "44.1")
@@ -42,18 +45,31 @@ class TestTidalQualityFields:
     def test_low_is_aac(self):
         assert _tidal_quality_fields("LOW", 0) == ("AAC", 16, "44.1")
 
+    def test_album_quality_caps_user_request(self):
+        # Album only available as LOSSLESS but user asks for HI_RES → real
+        # download is LOSSLESS, so the folder must be labeled accordingly.
+        # Old code used the user's tier directly and produced "[FLAC-24-…]"
+        # folders full of CD-quality FLAC.
+        assert _tidal_quality_fields("LOSSLESS", 3) == ("FLAC", 16, "44.1")
+
     def test_missing_album_quality_falls_back_to_config(self):
-        # If Tidal didn't report audioQuality, use the configured tier so
+        # If Tidal didn't report audioQuality, trust the configured tier so
         # the folder still matches what was actually downloaded.
-        assert _tidal_quality_fields(None, 3) == ("FLAC", 24, "44.1")
+        # Tier 3 (HI_RES) → FLAC 16/44.1 (MQA container).
+        assert _tidal_quality_fields(None, 3) == ("FLAC", 16, "44.1")
         assert _tidal_quality_fields("", 1) == ("AAC", 16, "44.1")
+        # Tier 4 (HI_RES_LOSSLESS) → real 24/192 FLAC.
+        assert _tidal_quality_fields(None, 4) == ("FLAC", 24, "192")
 
     def test_unknown_quality_defaults_to_cd_quality(self):
         # Don't lie about HiRes — fall back to CD quality FLAC on unknown.
+        # Unknown enum string → no album-side cap, use the user's tier.
+        # Tier 3 (HI_RES) maps to MQA-FLAC 16/44.1.
         assert _tidal_quality_fields("WEIRD", 3) == ("FLAC", 16, "44.1")
 
     def test_case_insensitive(self):
-        assert _tidal_quality_fields("hi_res", 3) == ("FLAC", 24, "44.1")
+        assert _tidal_quality_fields("hi_res", 3) == ("FLAC", 16, "44.1")
+        assert _tidal_quality_fields("hi_res_lossless", 4) == ("FLAC", 24, "192")
 
 
 # ---------------------------------------------------------------------------

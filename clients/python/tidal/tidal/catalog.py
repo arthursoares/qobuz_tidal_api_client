@@ -2,11 +2,24 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
-from ._http import HttpTransport, LISTEN_URL
+from ._http import LISTEN_URL, HttpTransport
 from .errors import NonStreamableError
 from .types import Album, PaginatedResult, Track
+
+logger = logging.getLogger(__name__)
+
+
+def _unwrap_search_envelope(body: dict, key: str) -> dict:
+    """Tidal v1 ``search/<kind>`` returns ``{items, totalNumberOfItems, ...}``
+    directly, but some clients see a nested ``{key: {items, ...}}`` shape.
+    Tolerate both so the SDK works against either.
+    """
+    if isinstance(body, dict) and key in body and isinstance(body[key], dict):
+        return body[key]
+    return body
 
 
 class CatalogAPI:
@@ -116,7 +129,14 @@ class CatalogAPI:
         _, body = await self._t.get(
             "search/albums", {"query": query, "limit": limit, "offset": offset}
         )
-        return PaginatedResult.from_dict(body)
+        envelope = _unwrap_search_envelope(body, "albums")
+        logger.debug(
+            "tidal search/albums q=%r limit=%d offset=%d → total=%s items=%d",
+            query, limit, offset,
+            envelope.get("totalNumberOfItems"),
+            len(envelope.get("items") or []),
+        )
+        return PaginatedResult.from_dict(envelope)
 
     async def search_tracks(
         self,
@@ -129,7 +149,7 @@ class CatalogAPI:
         _, body = await self._t.get(
             "search/tracks", {"query": query, "limit": limit, "offset": offset}
         )
-        return PaginatedResult.from_dict(body)
+        return PaginatedResult.from_dict(_unwrap_search_envelope(body, "tracks"))
 
     async def search_artists(
         self,
@@ -142,4 +162,4 @@ class CatalogAPI:
         _, body = await self._t.get(
             "search/artists", {"query": query, "limit": limit, "offset": offset}
         )
-        return PaginatedResult.from_dict(body)
+        return PaginatedResult.from_dict(_unwrap_search_envelope(body, "artists"))

@@ -7,8 +7,7 @@ import logging
 import os
 import re
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Callable
+from typing import Callable
 
 import aiohttp
 
@@ -560,7 +559,19 @@ class AlbumDownloader:
         self, path: str, track: Track, album: Album, cover_path: str | None,
         raw_album: dict | None = None, raw_track: dict | None = None,
     ) -> None:
-        from mutagen.id3 import ID3, APIC, TIT2, TPE1, TPE2, TALB, TRCK, TPOS, TDRC, TCON, TSRC
+        from mutagen.id3 import (
+            APIC,
+            ID3,
+            TALB,
+            TCON,
+            TDRC,
+            TIT2,
+            TPE1,
+            TPE2,
+            TPOS,
+            TRCK,
+            TSRC,
+        )
 
         title = _build_track_title(track, raw_track)
         albumartist = _build_albumartist(album)
@@ -628,13 +639,29 @@ class AlbumDownloader:
         if self.config.source_subdirectories:
             base = os.path.join(base, "Qobuz")
 
+        # Qobuz quality tiers (config.quality):
+        #   1 = MP3 320,  2 = FLAC 16/44.1,  3 = FLAC 24/up-to-96,  4 = FLAC 24/up-to-192
+        # Folder labels were previously fixed to ``album.maximum_*`` regardless
+        # of which tier was actually requested, so a 24/192 album downloaded at
+        # CD quality got tagged ``[FLAC] [24B-192kHz]``. Now they mirror the
+        # tier the user actually asked for, capped by the album's max.
+        album_bd = album.maximum_bit_depth or 16
+        album_sr = album.maximum_sampling_rate or 44.1
+        if self.config.quality >= 4:
+            bit_depth, sampling_rate = album_bd, album_sr
+        elif self.config.quality == 3:
+            bit_depth = min(album_bd, 24)
+            sampling_rate = min(album_sr, 96.0)
+        else:
+            bit_depth, sampling_rate = 16, 44.1
+
         replacements = {
             "albumartist": _safe_value(_build_albumartist(album)),
             "title": _safe_value(album.title),
             "year": album.release_date_original[:4] if album.release_date_original else "Unknown",
             "container": "FLAC" if self.config.quality >= 2 else "MP3",
-            "bit_depth": str(album.maximum_bit_depth),
-            "sampling_rate": str(album.maximum_sampling_rate).rstrip('0').rstrip('.'),
+            "bit_depth": str(bit_depth),
+            "sampling_rate": str(sampling_rate).rstrip('0').rstrip('.'),
             "id": album.id,
         }
 

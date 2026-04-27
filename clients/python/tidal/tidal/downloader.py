@@ -10,12 +10,9 @@ import os
 import re
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Callable
 
 import aiofiles
-import aiohttp
-
 from Cryptodome.Cipher import AES
 from Cryptodome.Util import Counter
 
@@ -91,6 +88,58 @@ class AlbumResult:
 # ---------------------------------------------------------------------------
 
 
+async def _remux_mp4_to_flac(path: str) -> bool:
+    """Remux an MP4-with-FLAC file in place into a native ``.flac`` file.
+
+    DASH-delivered Tidal lossless lands as fragmented MP4 with FLAC frames
+    inside. ffmpeg's ``-c:a copy`` extracts the FLAC stream into a real
+    native FLAC container — no re-encoding, lossless, fast.
+
+    Returns True if the file was remuxed (now a real FLAC), False if
+    ffmpeg wasn't on PATH (file left as MP4-wrapped FLAC). Raises on
+    ffmpeg execution failure. The boolean lets callers skip the FLAC
+    tagging path when the file isn't actually FLAC yet — mutagen.flac
+    raises FLACNoHeaderError on MP4-wrapped data.
+    """
+    import shutil
+
+    if shutil.which("ffmpeg") is None:
+        logger.warning(
+            "ffmpeg not on PATH — leaving %s as MP4-wrapped FLAC. "
+            "Install ffmpeg to get a native .flac that strict scanners "
+            "and the mutagen tag pipeline accept.",
+            os.path.basename(path),
+        )
+        return False
+
+    tmp_path = path + ".remux.flac"
+    proc = await asyncio.create_subprocess_exec(
+        "ffmpeg",
+        "-loglevel", "error",
+        "-y",                 # overwrite
+        "-i", path,
+        "-c:a", "copy",       # stream copy, no re-encode
+        "-vn",                # drop any embedded artwork (we tag it later)
+        "-f", "flac",
+        tmp_path,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+        raise RuntimeError(
+            f"ffmpeg remux failed for {os.path.basename(path)}: "
+            f"{stderr.decode('utf-8', errors='replace')[:300]}"
+        )
+    os.replace(tmp_path, path)
+    return True
+
+
 def _safe_value(s: str) -> str:
     """Sanitize a metadata value for use as a path component.
 
@@ -116,37 +165,44 @@ def _build_albumartist(album: Album) -> str:
     return album.artist.name or "Unknown"
 
 
+_TIDAL_TIER_RANK = {"LOW": 0, "HIGH": 1, "LOSSLESS": 2, "HI_RES": 3, "HI_RES_LOSSLESS": 4}
+_TIDAL_TIER_NAME = {0: "LOW", 1: "HIGH", 2: "LOSSLESS", 3: "HI_RES", 4: "HI_RES_LOSSLESS"}
+
+
 def _tidal_quality_fields(
     album_audio_quality: str | None,
     config_quality: int,
 ) -> tuple[str, int, str]:
     """Return ``(container, bit_depth, sampling_rate)`` for folder formatting.
 
-    Tidal reports an ``audioQuality`` enum on albums which maps cleanly onto
-    file format metadata:
+    The actual download tier is the *minimum* of (a) the highest tier the
+    album is available in, and (b) what the user asked for. Using the
+    album's max alone (the previous behaviour) labels folders as FLAC even
+    when the user has tidal_quality=HIGH and the actual files are AAC m4a.
 
-    - ``LOW``      — AAC ~96 kbps, 16-bit, 44.1 kHz
-    - ``HIGH``     — AAC ~320 kbps, 16-bit, 44.1 kHz
-    - ``LOSSLESS`` — FLAC 16-bit, 44.1 kHz (CD quality)
-    - ``HI_RES``   — FLAC 24-bit, 44.1 kHz (MQA folded into a 44.1 kHz container)
+    Tier → format:
 
-    When the album-level quality is missing we fall back to the configured
-    download quality tier so the folder label still reflects the *intended*
-    download, not a made-up default.
+    - ``LOW``             — AAC ~96 kbps
+    - ``HIGH``            — AAC ~320 kbps
+    - ``LOSSLESS``        — FLAC 16-bit, 44.1 kHz (CD quality)
+    - ``HI_RES``          — FLAC 16/44.1 with MQA folded in (legacy MQA tier)
+    - ``HI_RES_LOSSLESS`` — true 24-bit FLAC, up to 192 kHz
     """
-    quality = (album_audio_quality or "").upper()
-    if not quality:
-        quality = {0: "LOW", 1: "HIGH", 2: "LOSSLESS", 3: "HI_RES"}.get(
-            config_quality, "LOSSLESS"
-        )
+    cfg = max(0, min(int(config_quality), 4))
+    album_rank = _TIDAL_TIER_RANK.get(
+        (album_audio_quality or "").upper(),
+        cfg,  # absent ⇒ no album-side cap, trust the user's config
+    )
+    quality = _TIDAL_TIER_NAME[min(cfg, album_rank)]
 
     if quality in ("LOW", "HIGH"):
         return "AAC", 16, "44.1"
     if quality == "LOSSLESS":
         return "FLAC", 16, "44.1"
     if quality == "HI_RES":
-        return "FLAC", 24, "44.1"
-    # Unknown enum — assume CD quality FLAC rather than lying about HiRes.
+        return "FLAC", 16, "44.1"  # MQA-encoded; container is 16/44.1
+    if quality == "HI_RES_LOSSLESS":
+        return "FLAC", 24, "192"
     return "FLAC", 16, "44.1"
 
 
@@ -415,8 +471,29 @@ class AlbumDownloader:
         try:
             os.makedirs(os.path.dirname(target), exist_ok=True)
             await self._download_file(manifest, target, track_num)
-            if self._config.tag_files:
+            # Tidal's PKCE/DASH manifests deliver FLAC inside a fragmented
+            # MP4 container (``.flac`` extension but mp4 magic bytes). For
+            # the file to round-trip through mutagen and look like FLAC to
+            # strict scanners, remux to a real native FLAC if ffmpeg is on
+            # PATH. Best-effort — if ffmpeg isn't available we keep the
+            # mp4-wrapped file (still plays in mpv/VLC/foobar2000).
+            tag_safe = True
+            if manifest.is_dash and manifest.file_extension == "flac":
+                tag_safe = await _remux_mp4_to_flac(target)
+            # Skip tagging on un-remuxed DASH FLAC: mutagen.flac would
+            # raise FLACNoHeaderError on the MP4 magic bytes, the outer
+            # handler would delete the file, and the user would see a
+            # successful download silently fail. Better to keep the file
+            # untagged than to lose it.
+            if self._config.tag_files and tag_safe:
                 self._tag_file(target, track, album, cover_path, manifest)
+            elif self._config.tag_files and not tag_safe:
+                logger.warning(
+                    "Skipping tag write for %s — file is MP4-wrapped FLAC "
+                    "(no ffmpeg available to remux). Install ffmpeg or "
+                    "tag manually.",
+                    os.path.basename(target),
+                )
         except Exception as exc:
             logger.exception("Download failed for track %s", track.id)
             # Clean up both the final target and the ``.enc`` temp (if any)
@@ -456,20 +533,23 @@ class AlbumDownloader:
         self, manifest: StreamManifest, target_path: str, track_num: int,
         retries: int = 5,
     ) -> None:
-        """Stream the file to disk and decrypt if needed.
+        """Stream the track to disk.
 
-        Encrypted (MQA / HiRes) tracks are streamed to ``<target>.enc``
-        first and then decrypted onto ``<target>``. The temp file is
-        always cleaned up — even if the download or decrypt raises
-        partway through — so partial ``.enc`` files never leak.
+        Three flavours, picked by the manifest:
+        - **DASH** (``manifest.is_dash``) — concatenate every segment URL into
+          the target file in order. Single open file, append per segment.
+        - **BTS encrypted** — single download into ``<target>.enc``, then
+          AES-CTR decrypt to ``<target>``.
+        - **BTS plaintext** — single download straight to ``<target>``.
 
-        Retries the underlying HTTP stream up to *retries* times with
-        exponential backoff (2, 4, 8, 16s).  The Tidal CDN occasionally
-        closes connections mid-stream (``ContentLengthError`` /
-        ``ClientPayloadError``); a brief retry almost always succeeds.
-        Decrypt errors are *not* retried (those indicate a bad key, not
-        a network blip).
+        Each per-URL fetch is retried with exponential backoff (2/4/8/16s)
+        on the usual Tidal CDN flakiness. Decrypt failures aren't retried
+        (a bad key won't fix itself).
         """
+        if manifest.is_dash:
+            await self._download_dash(manifest, target_path, track_num, retries)
+            return
+
         chunk_size = 2**17  # 128 KiB
         encrypted_path = target_path if not manifest.is_encrypted else target_path + ".enc"
 
@@ -532,6 +612,87 @@ class AlbumDownloader:
                     os.remove(encrypted_path)
                 except OSError:
                     pass
+
+    async def _download_dash(
+        self,
+        manifest: StreamManifest,
+        target_path: str,
+        track_num: int,
+        retries: int,
+    ) -> None:
+        """Download a Tidal DASH track by concatenating its segments.
+
+        Sequential rather than parallel: total bytes are unknown up-front
+        (HEAD on a Tidal segment URL is unreliable), and concatenation
+        order is load-bearing — the init segment must precede the media
+        segments. Progress is approximated by segment index since we
+        can't know byte totals before fetching.
+        """
+        chunk_size = 2**17  # 128 KiB
+        urls = manifest.urls or [manifest.url]
+        total_segments = len(urls)
+        bytes_done = 0
+
+        # Best-effort progress: scale segments to a "fake" byte total so
+        # the UI shows a moving bar. The real byte count comes after.
+        fake_total = max(total_segments, 1)
+
+        try:
+            async with aiofiles.open(target_path, "wb") as out:
+                for idx, url in enumerate(urls):
+                    # Snapshot the file position *before* this segment so a
+                    # mid-stream failure can be rolled back on retry. Without
+                    # this, a partial write followed by a successful retry
+                    # appends a duplicate prefix and corrupts the output.
+                    segment_start = await out.tell()
+                    last_exc: Exception | None = None
+                    for attempt in range(retries):
+                        try:
+                            session = await self._client._transport.session()
+                            async with session.get(url) as resp:
+                                if resp.status >= 400:
+                                    raise RuntimeError(
+                                        f"DASH segment HTTP {resp.status} "
+                                        f"(track {manifest.track_id}, segment {idx})"
+                                    )
+                                async for chunk in resp.content.iter_chunked(chunk_size):
+                                    await out.write(chunk)
+                                    bytes_done += len(chunk)
+                            last_exc = None
+                            break
+                        except Exception as e:
+                            last_exc = e
+                            if attempt < retries - 1:
+                                backoff = 2 * (2**attempt)
+                                logger.warning(
+                                    "Tidal DASH segment %d/%d retry %d/%d for "
+                                    "track %s in %ds: %s",
+                                    idx, total_segments, attempt + 1, retries,
+                                    manifest.track_id, backoff, e,
+                                )
+                                # Roll back any partial bytes from the failed
+                                # attempt so the retry writes from a clean offset.
+                                bytes_done -= max(0, await out.tell() - segment_start)
+                                await out.seek(segment_start)
+                                await out.truncate()
+                                await asyncio.sleep(backoff)
+                    if last_exc is not None:
+                        logger.error(
+                            "Tidal DASH download failed for track %s on segment %d: %s",
+                            manifest.track_id, idx, last_exc,
+                        )
+                        raise last_exc
+                    if self._on_track_progress is not None:
+                        # Treat segment progress as fractional bytes-of-fake-total;
+                        # the real progress callback expects (done, total) in bytes.
+                        self._on_track_progress(track_num, idx + 1, fake_total)
+        except Exception:
+            if os.path.exists(target_path):
+                try:
+                    os.remove(target_path)
+                except OSError:
+                    pass
+            raise
 
     # -- Tagging -------------------------------------------------------------
 
