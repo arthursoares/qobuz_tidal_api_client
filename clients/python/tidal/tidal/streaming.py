@@ -118,8 +118,6 @@ class StreamingAPI:
             len(resp.get("manifest") or ""), encryption_type,
         )
 
-        decoded_manifest = base64.b64decode(resp["manifest"])
-
         if mime == "application/dash+xml":
             # Tidal hands DASH manifests to PKCE-issued tokens. Even encrypted
             # tracks would land here — but Tidal currently sets encryptionType
@@ -131,7 +129,7 @@ class StreamingAPI:
                 )
             try:
                 codec, segment_urls = _parse_dash_manifest(
-                    decoded_manifest.decode("utf-8")
+                    base64.b64decode(resp["manifest"]).decode("utf-8")
                 )
             except ET.ParseError as exc:
                 raise NonStreamableError(
@@ -148,9 +146,14 @@ class StreamingAPI:
                 encryption_key=None,
             )
 
-        # Legacy BTS (single-URL JSON) path
+        # Legacy BTS (single-URL JSON) path. Decode + JSON parse share one
+        # try/except so a corrupt base64 or invalid JSON at a higher tier
+        # walks down to a tier the user can actually play, instead of
+        # bubbling out as an unhandled error.
         try:
-            manifest = json.loads(decoded_manifest.decode("utf-8"))
+            manifest = json.loads(
+                base64.b64decode(resp["manifest"]).decode("utf-8")
+            )
         except (JSONDecodeError, binascii.Error, UnicodeDecodeError, ValueError) as exc:
             if quality <= 0:
                 raise NonStreamableError(

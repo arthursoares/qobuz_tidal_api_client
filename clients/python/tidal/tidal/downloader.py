@@ -88,25 +88,29 @@ class AlbumResult:
 # ---------------------------------------------------------------------------
 
 
-async def _remux_mp4_to_flac(path: str) -> None:
+async def _remux_mp4_to_flac(path: str) -> bool:
     """Remux an MP4-with-FLAC file in place into a native ``.flac`` file.
 
     DASH-delivered Tidal lossless lands as fragmented MP4 with FLAC frames
     inside. ffmpeg's ``-c:a copy`` extracts the FLAC stream into a real
     native FLAC container — no re-encoding, lossless, fast.
 
-    No-op if ffmpeg is not on PATH (the file plays fine in lenient
-    players, just won't be tagged because mutagen rejects the magic).
+    Returns True if the file was remuxed (now a real FLAC), False if
+    ffmpeg wasn't on PATH (file left as MP4-wrapped FLAC). Raises on
+    ffmpeg execution failure. The boolean lets callers skip the FLAC
+    tagging path when the file isn't actually FLAC yet — mutagen.flac
+    raises FLACNoHeaderError on MP4-wrapped data.
     """
     import shutil
 
     if shutil.which("ffmpeg") is None:
         logger.warning(
             "ffmpeg not on PATH — leaving %s as MP4-wrapped FLAC. "
-            "Install ffmpeg to get native .flac with proper tagging.",
+            "Install ffmpeg to get a native .flac that strict scanners "
+            "and the mutagen tag pipeline accept.",
             os.path.basename(path),
         )
-        return
+        return False
 
     tmp_path = path + ".remux.flac"
     proc = await asyncio.create_subprocess_exec(
@@ -133,6 +137,7 @@ async def _remux_mp4_to_flac(path: str) -> None:
             f"{stderr.decode('utf-8', errors='replace')[:300]}"
         )
     os.replace(tmp_path, path)
+    return True
 
 
 def _safe_value(s: str) -> str:
@@ -472,10 +477,23 @@ class AlbumDownloader:
             # strict scanners, remux to a real native FLAC if ffmpeg is on
             # PATH. Best-effort — if ffmpeg isn't available we keep the
             # mp4-wrapped file (still plays in mpv/VLC/foobar2000).
+            tag_safe = True
             if manifest.is_dash and manifest.file_extension == "flac":
-                await _remux_mp4_to_flac(target)
-            if self._config.tag_files:
+                tag_safe = await _remux_mp4_to_flac(target)
+            # Skip tagging on un-remuxed DASH FLAC: mutagen.flac would
+            # raise FLACNoHeaderError on the MP4 magic bytes, the outer
+            # handler would delete the file, and the user would see a
+            # successful download silently fail. Better to keep the file
+            # untagged than to lose it.
+            if self._config.tag_files and tag_safe:
                 self._tag_file(target, track, album, cover_path, manifest)
+            elif self._config.tag_files and not tag_safe:
+                logger.warning(
+                    "Skipping tag write for %s — file is MP4-wrapped FLAC "
+                    "(no ffmpeg available to remux). Install ffmpeg or "
+                    "tag manually.",
+                    os.path.basename(target),
+                )
         except Exception as exc:
             logger.exception("Download failed for track %s", track.id)
             # Clean up both the final target and the ``.enc`` temp (if any)
@@ -622,6 +640,11 @@ class AlbumDownloader:
         try:
             async with aiofiles.open(target_path, "wb") as out:
                 for idx, url in enumerate(urls):
+                    # Snapshot the file position *before* this segment so a
+                    # mid-stream failure can be rolled back on retry. Without
+                    # this, a partial write followed by a successful retry
+                    # appends a duplicate prefix and corrupts the output.
+                    segment_start = await out.tell()
                     last_exc: Exception | None = None
                     for attempt in range(retries):
                         try:
@@ -647,6 +670,11 @@ class AlbumDownloader:
                                     idx, total_segments, attempt + 1, retries,
                                     manifest.track_id, backoff, e,
                                 )
+                                # Roll back any partial bytes from the failed
+                                # attempt so the retry writes from a clean offset.
+                                bytes_done -= max(0, await out.tell() - segment_start)
+                                await out.seek(segment_start)
+                                await out.truncate()
                                 await asyncio.sleep(backoff)
                     if last_exc is not None:
                         logger.error(
