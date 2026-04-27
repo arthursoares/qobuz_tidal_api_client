@@ -3,14 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
-# Quality tier → Tidal audioquality string. Mirrors streamrip's QUALITY_MAP.
+# Quality tier → Tidal audioquality string.
+#
+# Tier 3 (``HI_RES``) is the *legacy* MQA-folded format: physically a
+# 16/44.1 FLAC carrying MQA-encoded subbands. Tidal launched ``HI_RES_LOSSLESS``
+# in mid-2024 as a separate, true 24-bit/up-to-192 kHz tier delivered via a
+# DASH/MPD manifest with BTS encryption — its JSON-vs-XML manifest split is
+# what makes adding it more involved than just appending an enum.
 QUALITY_MAP: dict[int, str] = {
-    0: "LOW",       # AAC ~96kbps
-    1: "HIGH",      # AAC ~320kbps
-    2: "LOSSLESS",  # FLAC 16-bit/44.1kHz (CD quality)
-    3: "HI_RES",    # MQA / FLAC HiRes
+    0: "LOW",              # AAC ~96kbps
+    1: "HIGH",             # AAC ~320kbps
+    2: "LOSSLESS",         # FLAC 16-bit/44.1kHz (CD quality)
+    3: "HI_RES",           # MQA-folded FLAC (legacy "HiRes" tier)
+    4: "HI_RES_LOSSLESS",  # True 24-bit FLAC, up to 192kHz (BTS / DASH)
 }
 
 
@@ -157,7 +163,17 @@ class Playlist:
 
 @dataclass
 class StreamManifest:
-    """Decoded playback manifest from playbackinfopostpaywall."""
+    """Decoded playback manifest from playbackinfopostpaywall.
+
+    Two manifest shapes flow through here:
+
+    - **BTS** (legacy MQA / device-code clients): a single ``url`` to a
+      complete file, optionally AES-CTR encrypted.
+    - **DASH** (PKCE / HiRes-Lossless clients): a list of segment URLs
+      that have to be downloaded in order and concatenated into a single
+      fragmented-MP4 file. ``url`` aliases ``urls[0]`` for back-compat
+      with code that pre-dates DASH support.
+    """
 
     track_id: int
     audio_quality: str  # "LOSSLESS", "HI_RES", etc. (uppercase)
@@ -166,6 +182,10 @@ class StreamManifest:
     encryption_type: str = "NONE"
     encryption_key: str | None = None  # base64
     restrictions: list[dict] = field(default_factory=list)
+    # New for DASH: full ordered list of segment URLs (init + N media).
+    # For BTS manifests this stays empty and ``url`` is the only handle.
+    urls: list[str] = field(default_factory=list)
+    is_dash: bool = False
 
     @property
     def is_encrypted(self) -> bool:
@@ -175,6 +195,9 @@ class StreamManifest:
     def file_extension(self) -> str:
         codec = self.codec.lower()
         if codec in ("flac", "mqa"):
+            # DASH-delivered FLAC arrives wrapped in a fragmented MP4 container
+            # (mp4-with-FLAC). Most music players handle that under .flac, but
+            # strict FLAC parsers won't — see the optional ffmpeg remux step.
             return "flac"
         return "m4a"
 
